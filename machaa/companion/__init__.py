@@ -1,7 +1,5 @@
-"""Desktop companion seam. Not shipped on Day 1.
+"""Windows Companion.
 
-A later local companion can sit beside the owner's machine, start when
-they say "open Machaa", and send tasks to this same API. It is not a
-reason to read the personal Chrome profile. The browser Machaa uses
-stays the dedicated profile created in its own data directory.
+This process runs on the owner's PC, outside the Docker worker. It listens
+on 127.0.0.1 only. It does not attach to a personal Chrome profile.
 """

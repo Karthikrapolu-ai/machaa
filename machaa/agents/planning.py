@@ -1,7 +1,9 @@
-"""Turn one sentence into a search, a page visit, a Word brief, or a social post.
+"""Turn one sentence into a search, a page visit, a Word brief, a social post, or a desktop action.
 
 Search and Word-document requests stay on fixed steps. A social post is the
 request the planner is allowed to turn into a short list of actions.
+Desktop sentences are recognised before a social post, so a caption that
+should be typed into Notepad is not turned into a Word document.
 """
 
 from __future__ import annotations
@@ -36,6 +38,10 @@ _AUDIENCE = re.compile(
     r"\b(?:audience|aimed at|for an audience of)\s+(.+?)(?:\.|$)",
     re.IGNORECASE,
 )
+_DESKTOP = re.compile(
+    r"\b(notepad|calculator|file explorer|machaa documents|open machaa)\b",
+    re.IGNORECASE,
+)
 _PLATFORM_NAMES = {
     "instagram": "Instagram",
     "facebook": "Facebook",
@@ -63,15 +69,17 @@ def parse_research_request(instruction: str) -> ResearchPlan | None:
     text = " ".join(instruction.strip().split())
     if not text:
         return None
-    social = _social_plan(text)
-    if social is not None:
-        return social
-    document_query = _document_query(text)
-    if document_query:
-        return ResearchPlan(kind="document", query=document_query)
     query = _search_query(text)
     if query:
         return ResearchPlan(kind="search", query=query)
+    document_query = _document_query(text)
+    if document_query:
+        return ResearchPlan(kind="document", query=document_query)
+    if _DESKTOP.search(text):
+        return ResearchPlan(kind="desktop", query=text[:300])
+    social = _social_plan(text)
+    if social is not None:
+        return social
     url = _explicit_url(text)
     if url and (_VISIT_VERB.search(text) or text.lower().startswith("http")):
         return ResearchPlan(kind="visit", url=url)

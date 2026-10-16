@@ -56,6 +56,24 @@ def test_acceptance_social_sentence_is_a_social_plan():
     assert plan.query == "affordable premium-looking 2BHK interiors"
 
 
+def test_notepad_captions_are_desktop_not_a_social_post():
+    sentence = (
+        "Machaa, write three Instagram caption ideas for Vistaara Interiors in Notepad."
+    )
+    plan = parse_research_request(sentence)
+    assert plan is not None
+    assert plan.kind == "desktop"
+
+
+def test_bedroom_search_stays_a_search():
+    plan = parse_research_request(
+        "Machaa, open Google and search for modern bedroom interiors."
+    )
+    assert plan is not None
+    assert plan.kind == "search"
+    assert plan.query == "modern bedroom interiors"
+
+
 def test_word_document_stays_a_document():
     plan = parse_research_request("Write a Word document about simple 2BHK interior design ideas")
     assert plan is not None

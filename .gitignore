@@ -231,3 +231,7 @@ artifacts/
 *.webp
 .DS_Store
 *.log
+*.wav
+*.webm
+*.mp3
+companion.token

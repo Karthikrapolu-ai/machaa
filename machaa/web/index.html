@@ -37,6 +37,20 @@
         </p>
       </section>
 
+      <section class="controls" aria-label="Voice and desktop">
+        <button type="button" class="talk" data-testid="talk">Hold to talk</button>
+        <button type="button" class="stop" data-testid="mute" aria-pressed="false">Mute</button>
+        <p class="mic" data-testid="mic-status">Microphone off</p>
+        <label class="switch">
+          <input type="checkbox" data-testid="desktop-control" />
+          Desktop control
+        </label>
+        <label class="switch">
+          <input type="checkbox" data-testid="wake-word" />
+          Listen for Open Machaa
+        </label>
+      </section>
+
       <main id="thread" data-testid="thread" aria-live="polite">
         <section class="empty" id="empty">
           <h2>What should Machaa look up?</h2>
@@ -63,6 +77,9 @@
           <button type="button" data-example="Machaa, prepare an Instagram content document for Vistaara Interiors about affordable premium-looking 2BHK interiors. Research design ideas, find a suitably licensed reference image, and create 3 captions with hashtags.">
             Instagram post
           </button>
+          <button type="button" data-example="Machaa, open Notepad.">
+            Open Notepad
+          </button>
         </div>
         <div class="entry">
           <label class="sr-only" for="instruction">Ask Machaa</label>
@@ -74,7 +91,7 @@
           ></textarea>
           <button type="submit" data-testid="send">Send</button>
         </div>
-        <p class="hint">Runs on this computer. A Word document or social post uses the free Gemini key in the .env file. Shift+Enter adds a line.</p>
+        <p class="hint">Runs on this computer. Hold Talk to speak, or type. Desktop control stays off until you turn it on. A Word document or social post uses the free Gemini key in the .env file.</p>
       </form>
     </div>
     <script src="/assets/app.js"></script>

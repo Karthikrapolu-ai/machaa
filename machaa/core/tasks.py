@@ -58,6 +58,7 @@ class TaskRecord:
     page_url: str | None
     stop_requested: bool
     pause_requested: bool
+    approval: str
     created_at: str
     updated_at: str
     steps: list[StepRecord]
@@ -75,6 +76,7 @@ class TaskRecord:
             "page_url": self.page_url,
             "stop_requested": self.stop_requested,
             "pause_requested": self.pause_requested,
+            "approval": self.approval,
             "has_screenshot": bool(self.screenshot_path),
             "has_report": bool(self.report_path),
             "has_document": bool(self.document_path),
@@ -110,6 +112,7 @@ class TaskStore:
                     document_path TEXT,
                     stop_requested INTEGER NOT NULL DEFAULT 0,
                     pause_requested INTEGER NOT NULL DEFAULT 0,
+                    approval TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -141,6 +144,10 @@ class TaskStore:
             if "pause_requested" not in columns:
                 self._connection.execute(
                     "ALTER TABLE tasks ADD COLUMN pause_requested INTEGER NOT NULL DEFAULT 0"
+                )
+            if "approval" not in columns:
+                self._connection.execute(
+                    "ALTER TABLE tasks ADD COLUMN approval TEXT NOT NULL DEFAULT ''"
                 )
             self._connection.commit()
 
@@ -205,6 +212,7 @@ class TaskStore:
             "document_path",
             "stop_requested",
             "pause_requested",
+            "approval",
         }
         unknown = set(fields) - allowed
         if unknown:
@@ -231,7 +239,7 @@ class TaskStore:
             return None
         if task.status in TERMINAL_STATUSES:
             return task
-        if task.status in {"queued", "paused"}:
+        if task.status in {"queued", "paused", "needs_approval"}:
             self.finish(task_id, status="stopped", summary="Stopped.", stop_requested=True)
         else:
             self.set_fields(task_id, stop_requested=True)
@@ -380,6 +388,7 @@ def _task_from_row(row: sqlite3.Row, steps: list[sqlite3.Row]) -> TaskRecord:
         document_path=row["document_path"] if "document_path" in row.keys() else None,
         stop_requested=bool(row["stop_requested"]),
         pause_requested=bool(row["pause_requested"]) if "pause_requested" in row.keys() else False,
+        approval=row["approval"] if "approval" in row.keys() and row["approval"] else "",
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         steps=[

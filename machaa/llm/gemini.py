@@ -89,6 +89,12 @@ class GeminiClient:
         text, _model = self._complete(_plan_prompt(instruction, feedback, max_steps))
         return parse_plan(text)
 
+    def plan_desktop(self, instruction: str, feedback: str = "", max_steps: int = 8) -> list:
+        """Ask for a desktop plan. The caller still has to validate it."""
+
+        text, _model = self._complete(_desktop_prompt(instruction, feedback, max_steps))
+        return parse_plan(text)
+
     def write_social(
         self,
         brand: str,
@@ -413,6 +419,33 @@ def _plan_prompt(instruction: str, feedback: str, max_steps: int) -> str:
         "Do not use a shell, a download command, or any other tool. "
         "Do not add argument names that are not listed. "
         "For a social post, use search, then a licensed image, then content.write_social. "
+        'Return JSON only: {"actions":[{"tool":"...","arguments":{},"label":"..."}]}.\n'
+        f"{repair}"
+        f"Request: {instruction.strip()[:2000]}\n"
+    )
+
+
+def _desktop_prompt(instruction: str, feedback: str, max_steps: int) -> str:
+    repair = ""
+    if feedback.strip():
+        repair = (
+            "The previous plan was rejected: "
+            f"{feedback.strip()[:500]}. Return a different plan that passes.\n"
+        )
+    return (
+        "Turn the request into a JSON list of desktop actions. "
+        f"Use at most {max_steps} actions. "
+        "Allowed tools and their exact argument names are:\n"
+        '- desktop.open_notepad with {}\n'
+        '- desktop.open_calculator with {}\n'
+        '- desktop.open_explorer with {}\n'
+        '- desktop.focus_dashboard with {}\n'
+        '- desktop.type_notepad with {"text": "..."}\n'
+        '- desktop.save_text with {"filename": "name.txt", "text": "..."}\n'
+        '- desktop.read_file with {"filename": "name.txt"}\n'
+        '- desktop.open_website with {"url": "https://..."}\n'
+        "filename must be a simple .txt or .md name with no folders. "
+        "Do not use a shell, PowerShell, cmd, or any other tool. "
         'Return JSON only: {"actions":[{"tool":"...","arguments":{},"label":"..."}]}.\n'
         f"{repair}"
         f"Request: {instruction.strip()[:2000]}\n"
