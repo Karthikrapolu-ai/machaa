@@ -17,7 +17,35 @@
             <p>Personal AI computer</p>
           </div>
         </div>
-        <p class="safety">On this computer · Guardian on · Its own browser</p>
+        <div class="header-side">
+          <p class="safety">On this computer · Guardian on · Its own browser</p>
+          <details class="settings" data-testid="settings">
+            <summary title="Voice, desktop, and updates">Settings</summary>
+            <div class="settings-body">
+              <p class="settings-note">Hold to talk stays off. Click the microphone in the message box.</p>
+              <button type="button" class="stop" data-testid="mute" aria-pressed="false" title="Turn spoken replies off">Mute</button>
+              <label class="switch" title="Off until you turn it on. Then Machaa can open Notepad, Calculator, or File Explorer.">
+                <input type="checkbox" data-testid="desktop-control" />
+                Desktop control
+              </label>
+              <label class="switch" title="Off unless you turn it on. Needs the optional voice program on this computer.">
+                <input type="checkbox" data-testid="wake-word" />
+                Listen for Open Machaa
+              </label>
+              <p data-testid="runtime-status"></p>
+              <div class="updates">
+                <button type="button" class="stop" data-testid="check-updates" title="Look at the official Machaa repository only">Check for updates</button>
+                <p data-testid="update-status">Updates come only from the official Machaa repository.</p>
+                <label class="switch" title="For the founder while Machaa is being built. Off by default. Official repository only. Forks are ignored.">
+                  <input type="checkbox" data-testid="track-branch" />
+                  Track a draft branch (testing only, off by default)
+                </label>
+                <input data-testid="track-branch-name" type="text" placeholder="Official branch name" title="Used only when draft tracking is on" />
+                <button type="button" class="talk" data-testid="apply-update" hidden>Update now</button>
+              </div>
+            </div>
+          </details>
+        </div>
       </header>
 
       <section class="banner" data-testid="gemini-setup">
@@ -32,23 +60,10 @@
         <p>
           Get a free key at
           <a href="https://aistudio.google.com/apikey" rel="noreferrer noopener" target="_blank">aistudio.google.com/apikey</a>.
-          Save the file and start Machaa again. On Windows, click the
-          start.bat window, press Ctrl+C, and double-click start.bat.
+          Save the file and start Machaa again. On Windows, double-click
+          STOP-MACHAA.bat, then double-click START-MACHAA.bat. The older
+          start.bat still starts the dashboard.
         </p>
-      </section>
-
-      <section class="controls" aria-label="Voice and desktop">
-        <button type="button" class="talk" data-testid="talk">Hold to talk</button>
-        <button type="button" class="stop" data-testid="mute" aria-pressed="false">Mute</button>
-        <p class="mic" data-testid="mic-status">Microphone off</p>
-        <label class="switch">
-          <input type="checkbox" data-testid="desktop-control" />
-          Desktop control
-        </label>
-        <label class="switch">
-          <input type="checkbox" data-testid="wake-word" />
-          Listen for Open Machaa
-        </label>
       </section>
 
       <main id="thread" data-testid="thread" aria-live="polite">
@@ -89,9 +104,21 @@
             rows="2"
             placeholder="Open Google and search for simple 2BHK interior design ideas"
           ></textarea>
+          <div class="record-bar" data-testid="recording" hidden>
+            <span class="record-dot" data-testid="recording-dot" aria-hidden="true"></span>
+            <span data-testid="recording-timer">00:00</span>
+            <button type="button" data-testid="recording-stop">Stop</button>
+            <button type="button" data-testid="recording-cancel">Cancel</button>
+          </div>
+          <button type="button" class="mic-button" data-testid="talk" title="Click to record" aria-label="Click to record">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/>
+            </svg>
+          </button>
           <button type="submit" data-testid="send">Send</button>
         </div>
-        <p class="hint">Runs on this computer. Hold Talk to speak, or type. Desktop control stays off until you turn it on. A Word document or social post uses the free Gemini key in the .env file.</p>
+        <p class="mic live-mic" data-testid="mic-status">Microphone off</p>
+        <p class="hint">Runs on this computer. Click the microphone to speak, then edit the words before you send. Desktop control stays off until you turn it on in Settings. A Word document or social post uses the free Gemini key in the .env file.</p>
       </form>
     </div>
     <script src="/assets/app.js"></script>

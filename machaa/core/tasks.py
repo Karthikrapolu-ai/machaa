@@ -23,6 +23,55 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _phase_for_tool(tool: str) -> str:
+    return {
+        "browser.search_google": "Searching…",
+        "browser.visit_public_page": "Opening the page…",
+        "browser.extract_text": "Reading the page…",
+        "browser.screenshot": "Saving a screenshot…",
+        "image.find_licensed": "Looking for a licensed image…",
+        "content.write_social": "Generating captions…",
+        "llm.draft_document": "Generating the document…",
+        "report.save_docx": "Creating Word document…",
+        "report.save_markdown": "Saving the report…",
+        "desktop.open_notepad": "Opening Notepad…",
+        "desktop.open_calculator": "Opening Calculator…",
+        "desktop.open_explorer": "Opening File Explorer…",
+        "desktop.type_notepad": "Typing into Notepad…",
+        "desktop.save_text": "Saving the text file…",
+        "desktop.read_file": "Reading the file…",
+        "desktop.focus_dashboard": "Opening Machaa…",
+        "desktop.open_website": "Opening the page…",
+    }.get(tool, "Working…")
+
+
+def _phase_for_status(status: str) -> str:
+    return {
+        "queued": "Waiting",
+        "running": "Understanding…",
+        "paused": "Paused",
+        "needs_approval": "Waiting for your approval",
+        "needs_key": "Needs a Gemini key",
+        "needs_human": "Needs a person",
+        "completed": "Completed",
+        "failed": "Something went wrong",
+        "blocked": "Blocked",
+        "stopped": "Stopped",
+    }.get(status, "")
+
+
+def _elapsed_seconds(started_at: str) -> int:
+    if not started_at:
+        return 0
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return 0
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    return max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+
+
 @dataclass
 class StepRecord:
     id: int
@@ -59,6 +108,8 @@ class TaskRecord:
     stop_requested: bool
     pause_requested: bool
     approval: str
+    phase: str
+    started_at: str
     created_at: str
     updated_at: str
     steps: list[StepRecord]
@@ -77,6 +128,9 @@ class TaskRecord:
             "stop_requested": self.stop_requested,
             "pause_requested": self.pause_requested,
             "approval": self.approval,
+            "phase": self.phase or _phase_for_status(self.status),
+            "started_at": self.started_at,
+            "elapsed_seconds": _elapsed_seconds(self.started_at),
             "has_screenshot": bool(self.screenshot_path),
             "has_report": bool(self.report_path),
             "has_document": bool(self.document_path),
@@ -113,6 +167,8 @@ class TaskStore:
                     stop_requested INTEGER NOT NULL DEFAULT 0,
                     pause_requested INTEGER NOT NULL DEFAULT 0,
                     approval TEXT NOT NULL DEFAULT '',
+                    phase TEXT NOT NULL DEFAULT '',
+                    started_at TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -148,6 +204,12 @@ class TaskStore:
             if "approval" not in columns:
                 self._connection.execute(
                     "ALTER TABLE tasks ADD COLUMN approval TEXT NOT NULL DEFAULT ''"
+                )
+            if "phase" not in columns:
+                self._connection.execute("ALTER TABLE tasks ADD COLUMN phase TEXT NOT NULL DEFAULT ''")
+            if "started_at" not in columns:
+                self._connection.execute(
+                    "ALTER TABLE tasks ADD COLUMN started_at TEXT NOT NULL DEFAULT ''"
                 )
             self._connection.commit()
 
@@ -213,12 +275,17 @@ class TaskStore:
             "stop_requested",
             "pause_requested",
             "approval",
+            "phase",
+            "started_at",
         }
         unknown = set(fields) - allowed
         if unknown:
             raise ValueError(f"unknown task fields: {sorted(unknown)}")
         if not fields:
             return
+        if "status" in fields and "phase" not in fields:
+            fields = dict(fields)
+            fields["phase"] = _phase_for_status(str(fields["status"]))
         assignments = ", ".join(f"{name} = ?" for name in fields)
         values = [
             int(bool(value)) if name in {"stop_requested", "pause_requested"} else value
@@ -286,6 +353,10 @@ class TaskStore:
                 ) VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)
                 """,
                 (task_id, position, tool, label, json.dumps(arguments), status, now, now),
+            )
+            self._connection.execute(
+                "UPDATE tasks SET phase = ?, updated_at = ? WHERE id = ?",
+                (_phase_for_tool(tool), now, task_id),
             )
             self._connection.commit()
             return int(cursor.lastrowid)
@@ -369,6 +440,26 @@ class TaskStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def recover_interrupted(self) -> None:
+        """Mark work that was still open when Machaa last stopped."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT id FROM tasks
+                WHERE status IN ('queued', 'running', 'paused', 'needs_approval')
+                """
+            ).fetchall()
+        for row in rows:
+            self.finish(
+                row["id"],
+                status="failed",
+                summary=(
+                    "Machaa stopped before this finished. "
+                    "The steps already done are saved. Send the request again if you still want it."
+                ),
+            )
+
     def close(self) -> None:
         with self._lock:
             self._connection.close()
@@ -389,6 +480,8 @@ def _task_from_row(row: sqlite3.Row, steps: list[sqlite3.Row]) -> TaskRecord:
         stop_requested=bool(row["stop_requested"]),
         pause_requested=bool(row["pause_requested"]) if "pause_requested" in row.keys() else False,
         approval=row["approval"] if "approval" in row.keys() and row["approval"] else "",
+        phase=row["phase"] if "phase" in row.keys() and row["phase"] else "",
+        started_at=row["started_at"] if "started_at" in row.keys() and row["started_at"] else "",
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         steps=[

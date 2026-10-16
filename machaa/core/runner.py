@@ -8,7 +8,7 @@ import time
 
 from machaa.agents.research import ResearchAgent
 from machaa.config import Settings
-from machaa.core.tasks import TERMINAL_STATUSES, TaskStore
+from machaa.core.tasks import TERMINAL_STATUSES, TaskStore, utc_now
 from machaa.memory.store import LocalMemory
 
 log = logging.getLogger("machaa.runner")
@@ -30,6 +30,7 @@ class Runner:
         self.memory = memory
         self._slots = asyncio.Semaphore(1)
         self._jobs: set[asyncio.Task] = set()
+        self._active = 0
 
     def enqueue(self, task_id: str) -> None:
         """Schedule a task. The dashboard returns before this finishes."""
@@ -51,7 +52,14 @@ class Runner:
             if task.stop_requested:
                 self.store.finish(task_id, status="stopped", summary="Stopped.")
                 return
-            self.store.set_fields(task_id, status="running", agent="research")
+            self.store.set_fields(
+                task_id,
+                status="running",
+                agent="research",
+                phase="Understanding…",
+                started_at=utc_now(),
+            )
+            self._active = 1
             remaining = self.settings.task_timeout_seconds - (time.monotonic() - started)
             if remaining <= 0:
                 self.store.finish(
@@ -79,9 +87,14 @@ class Runner:
                     summary="Machaa hit an unexpected error and stopped this task.",
                 )
         finally:
+            self._active = 0
             if acquired:
                 self._slots.release()
             self._remember(task_id)
+
+    @property
+    def busy(self) -> bool:
+        return self._active > 0
 
     async def _acquire(self, task_id: str, started: float) -> bool:
         while True:

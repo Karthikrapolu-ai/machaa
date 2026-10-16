@@ -7,6 +7,16 @@ const mute = document.querySelector("[data-testid='mute']");
 const micStatus = document.querySelector("[data-testid='mic-status']");
 const desktopSwitch = document.querySelector("[data-testid='desktop-control']");
 const wakeSwitch = document.querySelector("[data-testid='wake-word']");
+const recordingBar = document.querySelector("[data-testid='recording']");
+const recordingTimer = document.querySelector("[data-testid='recording-timer']");
+const recordingStop = document.querySelector("[data-testid='recording-stop']");
+const recordingCancel = document.querySelector("[data-testid='recording-cancel']");
+const checkUpdates = document.querySelector("[data-testid='check-updates']");
+const updateStatus = document.querySelector("[data-testid='update-status']");
+const trackBranch = document.querySelector("[data-testid='track-branch']");
+const trackName = document.querySelector("[data-testid='track-branch-name']");
+const applyUpdate = document.querySelector("[data-testid='apply-update']");
+const runtimeStatus = document.querySelector("[data-testid='runtime-status']");
 
 const STATUS_LABELS = {
   queued: "Waiting",
@@ -34,11 +44,24 @@ let pollTimer = 0;
 let renderedCount = 0;
 let recorder = null;
 let recordStream = null;
+let recordChunks = [];
+let recordSeconds = 0;
+let recordTick = 0;
+let discardRecording = false;
 let wakeTimer = 0;
 let voicePrimed = false;
+let liveSource = null;
+let liveId = "";
 const reports = new Map();
 const spoken = new Set();
 const TERMINAL = new Set(["completed", "failed", "blocked", "stopped", "needs_human", "needs_key"]);
+
+function formatClock(total) {
+  const seconds = Math.max(0, Math.floor(Number(total) || 0));
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return String(minutes).padStart(2, "0") + ":" + String(rest).padStart(2, "0");
+}
 
 function muted() {
   return window.localStorage.getItem("machaa-muted") === "1";
@@ -71,8 +94,10 @@ if (muted()) {
   setMic("Muted");
 }
 
-talk.addEventListener("pointerdown", async (event) => {
-  event.preventDefault();
+talk.addEventListener("click", async () => {
+  if (recorder && recorder.state !== "inactive") {
+    return;
+  }
   if (muted()) {
     setMic("Muted");
     return;
@@ -85,36 +110,79 @@ talk.addEventListener("pointerdown", async (event) => {
     recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (error) {
     setMic("Microphone blocked. In Windows, choose Allow when the browser asks. You can still type.");
+    hideRecording();
     return;
   }
-  const chunks = [];
+  recordChunks = [];
+  discardRecording = false;
   recorder = new MediaRecorder(recordStream);
   recorder.addEventListener("dataavailable", (item) => {
     if (item.data && item.data.size) {
-      chunks.push(item.data);
+      recordChunks.push(item.data);
     }
   });
-  recorder.addEventListener("stop", () => uploadRecording(chunks));
+  recorder.addEventListener("stop", () => {
+    const chunks = recordChunks.slice();
+    const discard = discardRecording;
+    cleanupRecording();
+    if (discard) {
+      setMic("Recording cancelled. You can still type.");
+      return;
+    }
+    uploadRecording(chunks);
+  });
   recorder.start();
-  setMic("Listening");
-  talk.setPointerCapture(event.pointerId);
+  showRecording();
 });
 
-talk.addEventListener("pointerup", stopTalk);
-talk.addEventListener("pointercancel", stopTalk);
+recordingStop.addEventListener("click", () => {
+  discardRecording = false;
+  finishRecording();
+});
 
-function stopTalk() {
-  if (recorder && recorder.state !== "inactive") {
-    recorder.stop();
-  }
+recordingCancel.addEventListener("click", () => {
+  discardRecording = true;
+  finishRecording();
+});
+
+function showRecording() {
+  recordSeconds = 0;
+  recordingTimer.textContent = "00:00";
+  recordingBar.hidden = false;
+  talk.dataset.recording = "true";
+  setMic("Recording");
+  window.clearInterval(recordTick);
+  recordTick = window.setInterval(() => {
+    recordSeconds += 1;
+    recordingTimer.textContent = formatClock(recordSeconds);
+  }, 1000);
+}
+
+function hideRecording() {
+  recordingBar.hidden = true;
+  talk.dataset.recording = "false";
+  window.clearInterval(recordTick);
+  recordingTimer.textContent = "00:00";
+}
+
+function cleanupRecording() {
   recorder = null;
   if (recordStream) {
     recordStream.getTracks().forEach((track) => track.stop());
     recordStream = null;
   }
-  if (!muted()) {
+  hideRecording();
+  if (!muted() && micStatus.textContent === "Recording") {
     setMic("Microphone off");
   }
+}
+
+function finishRecording() {
+  if (recorder && recorder.state !== "inactive") {
+    recorder.stop();
+    return;
+  }
+  cleanupRecording();
 }
 
 async function uploadRecording(chunks) {
@@ -131,9 +199,8 @@ async function uploadRecording(chunks) {
       return;
     }
     input.value = body.text || "";
-    if (input.value.trim()) {
-      form.requestSubmit();
-    }
+    input.focus();
+    setMic(input.value.trim() ? "Ready to send. Edit the words if you want." : "That recording was empty. You can still type.");
   } catch (error) {
     setMic("Voice typing is unavailable. You can still type.");
   }
@@ -293,6 +360,7 @@ async function refresh() {
   render(payload.tasks || []);
   const tasks = payload.tasks || [];
   maybeSpeak(tasks);
+  watchLive(tasks);
   const active = tasks.some(
     (task) =>
       task.status === "queued" ||
@@ -350,12 +418,26 @@ function renderTask(task) {
 
   const top = document.createElement("div");
   top.className = "card-top";
+  const statusLine = document.createElement("div");
+  statusLine.className = "status-line";
   const pill = document.createElement("span");
   pill.className = "pill";
   pill.dataset.testid = "task-status";
   pill.dataset.status = task.status;
   pill.textContent = STATUS_LABELS[task.status] || task.status;
-  top.append(pill);
+  const phase = document.createElement("p");
+  phase.className = "phase";
+  phase.dataset.testid = "phase";
+  phase.textContent = task.phase || "";
+  const elapsed = document.createElement("span");
+  elapsed.className = "elapsed";
+  elapsed.dataset.testid = "elapsed";
+  elapsed.textContent = formatClock(task.elapsed_seconds || 0);
+  if (!TERMINAL.has(task.status) && task.started_at) {
+    elapsed.dataset.elapsedFrom = task.started_at;
+  }
+  statusLine.append(pill, phase, elapsed);
+  top.append(statusLine);
   const actions = document.createElement("div");
   actions.className = "card-actions";
   if (task.status === "needs_approval" && !task.stop_requested) {
@@ -479,6 +561,65 @@ async function loadReport(id, node) {
   node.textContent = text;
 }
 
+function watchLive(tasks) {
+  const active = tasks.find(
+    (task) =>
+      task.status === "queued" ||
+      task.status === "running" ||
+      task.status === "paused" ||
+      task.status === "needs_approval",
+  );
+  if (!active) {
+    if (liveSource) {
+      liveSource.close();
+      liveSource = null;
+    }
+    liveId = "";
+    return;
+  }
+  if (liveId === active.id && liveSource) {
+    return;
+  }
+  if (liveSource) {
+    liveSource.close();
+  }
+  liveId = active.id;
+  if (!window.EventSource) {
+    return;
+  }
+  liveSource = new EventSource("/api/tasks/" + active.id + "/events");
+  liveSource.onmessage = (event) => {
+    let body = {};
+    try {
+      body = JSON.parse(event.data);
+    } catch (error) {
+      return;
+    }
+    const card = thread.querySelector('[data-task-id="' + active.id + '"]');
+    if (!card) {
+      return;
+    }
+    const phaseNode = card.querySelector("[data-testid='phase']");
+    if (phaseNode && body.phase) {
+      phaseNode.textContent = body.phase;
+    }
+    const elapsedNode = card.querySelector("[data-testid='elapsed']");
+    if (elapsedNode && body.elapsed_seconds != null && !elapsedNode.dataset.elapsedFrom) {
+      elapsedNode.textContent = formatClock(body.elapsed_seconds);
+    }
+  };
+}
+
+window.setInterval(() => {
+  document.querySelectorAll("[data-elapsed-from]").forEach((node) => {
+    const started = Date.parse(node.getAttribute("data-elapsed-from"));
+    if (!Number.isFinite(started)) {
+      return;
+    }
+    node.textContent = formatClock((Date.now() - started) / 1000);
+  });
+}, 1000);
+
 function controlButton(kind, label, id) {
   const button = document.createElement("button");
   button.type = "button";
@@ -529,6 +670,85 @@ function safeUrl(value) {
   return "";
 }
 
+checkUpdates.addEventListener("click", async () => {
+  await saveTrackBranch();
+  await loadUpdateStatus();
+});
+
+trackBranch.addEventListener("change", saveTrackBranch);
+
+applyUpdate.addEventListener("click", async () => {
+  applyUpdate.disabled = true;
+  try {
+    const response = await fetch("/api/updates/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved: true }),
+    });
+    const body = await response.json();
+    updateStatus.textContent = body.detail || "The update was not applied.";
+    if (response.ok) {
+      applyUpdate.hidden = true;
+    }
+  } catch (error) {
+    updateStatus.textContent = "The update was not applied. Your files were left as they were.";
+  } finally {
+    applyUpdate.disabled = false;
+  }
+});
+
+async function saveTrackBranch() {
+  const response = await fetch("/api/updates/track", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      enabled: trackBranch.checked,
+      branch: trackName.value.trim(),
+    }),
+  });
+  const body = await response.json();
+  trackBranch.checked = Boolean(body.enabled);
+  if (!body.enabled) {
+    trackName.value = "";
+  }
+  if (body.detail) {
+    updateStatus.textContent = body.detail;
+  }
+}
+
+async function loadUpdateStatus() {
+  const response = await fetch("/api/updates");
+  if (!response.ok) {
+    updateStatus.textContent = "Machaa could not check for updates.";
+    return;
+  }
+  const body = await response.json();
+  const track = body.track || {};
+  trackBranch.checked = Boolean(track.enabled);
+  trackName.value = track.branch || "";
+  const available = body.available ? " Available: " + (body.version || body.ref) + "." : "";
+  updateStatus.textContent = "Current version " + (body.current || "") + ". " + (body.detail || "") + available;
+  applyUpdate.hidden = !body.available;
+}
+
+function showRuntime(health) {
+  const parts = [];
+  if (health.reconnect) {
+    parts.push(health.reconnect);
+  } else {
+    if (health.docker === "running") {
+      parts.push("Docker is running.");
+    }
+    if (health.companion_status === "reachable") {
+      parts.push("Companion is running.");
+    } else if (health.companion_status === "not_running") {
+      parts.push("Companion is not running.");
+    }
+  }
+  parts.push(health.browser_worker === "busy" ? "Browser is busy." : "Browser is ready.");
+  runtimeStatus.textContent = parts.join(" ");
+}
+
 async function loadSetup() {
   const banner = document.querySelector("[data-testid='gemini-setup']");
   try {
@@ -542,6 +762,7 @@ async function loadSetup() {
     }
     desktopSwitch.checked = Boolean(health.desktop_enabled);
     wakeSwitch.checked = false;
+    showRuntime(health);
     if (health.wake_enabled) {
       await fetch("/api/voice/wake", {
         method: "POST",
@@ -549,8 +770,10 @@ async function loadSetup() {
         body: JSON.stringify({ enabled: false }),
       });
     }
+    await loadUpdateStatus();
   } catch (error) {
     banner.hidden = false;
+    runtimeStatus.textContent = "Machaa is not connected. Double-click START-MACHAA.bat and leave that window open.";
   }
 }
 

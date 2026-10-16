@@ -91,6 +91,59 @@ header p,
   text-align: right;
 }
 
+.header-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.settings {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.settings summary {
+  cursor: pointer;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 260px;
+}
+
+.settings-note,
+.settings-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.updates {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.updates input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  padding: 8px;
+}
+
 #thread {
   flex: 1;
   display: flex;
@@ -142,7 +195,26 @@ header p,
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  align-items: flex-start;
+}
+
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   align-items: center;
+}
+
+.phase,
+.elapsed {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.elapsed {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
 
 .pill {
@@ -201,6 +273,10 @@ header p,
   margin: 0;
   color: var(--muted);
   font-size: 14px;
+}
+
+.live-mic {
+  margin-top: 8px;
 }
 
 .switch {
@@ -382,6 +458,49 @@ textarea:focus {
   cursor: pointer;
 }
 
+.entry .mic-button {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.entry .mic-button[data-recording="true"] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.record-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-bar[hidden] {
+  display: none;
+}
+
+.record-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.record-bar button {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
 .entry button:disabled {
   opacity: 0.6;
   cursor: wait;
@@ -406,9 +525,12 @@ textarea:focus {
 @media (max-width: 720px) {
   .app { width: min(100% - 20px, 920px); }
   header { flex-direction: column; align-items: flex-start; }
+  .header-side { align-items: flex-start; width: 100%; }
   .safety { text-align: left; }
+  .settings { width: 100%; }
   .empty h2 { font-size: 28px; }
   .bubble { max-width: 100%; }
+  .entry { flex-wrap: wrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {

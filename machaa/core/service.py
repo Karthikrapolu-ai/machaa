@@ -66,6 +66,12 @@ class TaskService:
             notes=self.notes,
         )
         self.runner = Runner(settings, self.store, self.research, self.memory)
+        self.store.recover_interrupted()
+        self.remote_listing = ""
+        self.update_runner = None
+        self.update_health = None
+        self._docker_checked_at = 0.0
+        self._docker_state = ""
 
     async def submit(self, instruction: str) -> dict:
         if is_stop_phrase(instruction):
@@ -190,6 +196,150 @@ class TaskService:
             ),
         }
 
+    def runtime_status(self) -> dict:
+        import time
+
+        from machaa.launcher import docker_available, port_open
+
+        now = time.monotonic()
+        if not self._docker_state or now - self._docker_checked_at > 30:
+            self._docker_state = docker_available()
+            self._docker_checked_at = now
+        companion_status = "not_configured"
+        notes: list[str] = []
+        if self._docker_state == "not_installed":
+            notes.append(
+                "Docker is not installed. Install Docker Desktop, open it, and double-click START-MACHAA.bat."
+            )
+        elif self._docker_state == "not_running":
+            notes.append(
+                "Docker is not running. Open Docker Desktop, then double-click START-MACHAA.bat."
+            )
+        if self.companion.configured():
+            port = _companion_port(self.companion.url)
+            companion_status = "reachable" if port_open(port) else "not_running"
+            if companion_status == "not_running":
+                notes.append(
+                    "The Windows Companion is not running. "
+                    "Double-click START-MACHAA.bat and leave that window open."
+                )
+        return {
+            "docker": self._docker_state,
+            "companion_status": companion_status,
+            "browser_worker": "busy" if self.runner.busy else "ready",
+            "reconnect": " ".join(notes),
+        }
+
+    def track_settings(self) -> dict:
+        path = self.settings.data_dir / "update-settings.json"
+        if not path.is_file():
+            return {"enabled": False, "branch": ""}
+        try:
+            import json
+
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {"enabled": False, "branch": ""}
+        if not isinstance(data, dict):
+            return {"enabled": False, "branch": ""}
+        return {"enabled": bool(data.get("enabled")), "branch": str(data.get("branch") or "")}
+
+    def set_track_branch(self, enabled: bool, branch: str) -> dict:
+        import json
+        import re
+
+        name = " ".join((branch or "").split())[:80]
+        if enabled and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,80}", name):
+            return {
+                "enabled": False,
+                "branch": "",
+                "detail": "That branch name cannot be used. Draft tracking stays off.",
+            }
+        payload = {"enabled": bool(enabled and name), "branch": name if enabled else ""}
+        path = self.settings.data_dir / "update-settings.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        detail = (
+            "Draft-branch tracking is on for the official Machaa repository only. Forks are still ignored."
+            if payload["enabled"]
+            else "Draft-branch tracking is off. Machaa looks at main and released versions."
+        )
+        return {**payload, "detail": detail}
+
+    def check_updates(self) -> dict:
+        from machaa import __version__
+        from machaa.update.trust import choose_update, parse_ls_remote
+
+        settings = self.track_settings()
+        track = settings["branch"] if settings["enabled"] else ""
+        listing = self.remote_listing if self.remote_listing else self._fetch_listing()
+        offer = choose_update(parse_ls_remote(listing), "", track)
+        if offer is None:
+            return {
+                "current": __version__,
+                "available": False,
+                "version": "",
+                "ref": "",
+                "detail": "No approved update was found on the official repository.",
+                "track_branch": track,
+            }
+        return {
+            "current": __version__,
+            "available": bool(offer["available"]),
+            "version": offer.get("version") or "",
+            "ref": offer.get("ref") or "",
+            "sha": offer.get("sha") or "",
+            "detail": (
+                "An update is available from the official repository."
+                if offer["available"]
+                else "Machaa is already on that version."
+            ),
+            "track_branch": track,
+        }
+
+    def apply_approved_update(self, approved: bool) -> str:
+        from machaa.update.engine import apply_update
+        from machaa.update.trust import UpdateRefused
+
+        if not approved:
+            raise PermissionError("Approval is needed before Machaa updates.")
+        offer = self.check_updates()
+        if not offer.get("available"):
+            return offer.get("detail") or "No approved update was found."
+        if self.update_runner is None:
+            return (
+                "Git is not available in this window. "
+                "Download the official Machaa zip when you want the next version."
+            )
+        root = self._project_root()
+        health = self.update_health if self.update_health is not None else (lambda: True)
+        return apply_update(
+            root,
+            "https://github.com/Karthikrapolu-ai/machaa.git",
+            str(offer["ref"]),
+            approved=True,
+            track_branch=str(offer.get("track_branch") or ""),
+            runner=self.update_runner,
+            health_ok=health,
+            current_sha="PREVIOUS",
+        )
+
+    def _fetch_listing(self) -> str:
+        return ""
+
+    def _project_root(self):
+        from pathlib import Path
+
+        from machaa.update.trust import UpdateRefused
+
+        candidate = self.settings.data_dir.parent
+        if (candidate / "machaa" / "__init__.py").is_file() and candidate != Path("/"):
+            return candidate
+        cwd = Path.cwd()
+        if (cwd / "machaa" / "__init__.py").is_file() and cwd != Path("/"):
+            return cwd
+        raise UpdateRefused("Machaa could not find its own folder, so it did not change any files.")
+
     def _latest_open(self):
         for record in reversed(self.store.list_recent(20)):
             if record.status not in TERMINAL_STATUSES:
@@ -234,3 +384,12 @@ class TaskService:
         if record is None:
             raise RuntimeError("task disappeared")
         return record.to_public()
+
+
+def _companion_port(url: str) -> int:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.port:
+        return int(parsed.port)
+    return 8788

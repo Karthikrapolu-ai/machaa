@@ -85,25 +85,45 @@ class FixtureGemini:
         angles = [
             (
                 "Light and layout",
+                "reel",
+                f"One light, one path through the room.",
                 f"{brand}: {topic}, with a finished look and room left to walk.",
+                f"Keep {topic} to a single warm light and a clear walkway. {brand} shows the room as it is, for {audience}.",
+                "Save this layout before you move a sofa.",
             ),
             (
                 "One strong wall",
+                "carousel",
+                f"One wall does the work.",
                 f"For {audience}, this {platform} idea keeps {topic} to one material and one colour.",
+                f"Slide through the wall, the floor, and the window. {brand} stays with {topic} and does not add a second pattern.",
+                "Send this to the person choosing the paint.",
             ),
             (
                 "Evening light",
+                "static",
+                "Warm lamps, clear surfaces.",
                 f"{brand} on {platform}: {topic} after dark, with warm lamps and clear surfaces.",
+                f"After dark, {topic} is the lamps and the empty floor. {brand} leaves the rest quiet.",
+                "Keep this for the evening photos.",
             ),
         ]
         tags = ["#InteriorDesign", "#2BHK", "#HomeInspo", "#AffordableLuxury", "#VistaaraInteriors"]
         concepts = []
-        for index, (name, caption) in enumerate(angles):
+        for index, (name, post_format, hook, caption, long_caption, cta) in enumerate(angles):
             concepts.append(
                 {
                     "name": name,
+                    "hook": hook,
                     "caption": caption,
+                    "short_caption": caption,
+                    "long_caption": long_caption,
+                    "cta": cta,
+                    "format": post_format,
                     "hashtags": tags[index : index + 3],
+                    "visual_direction": (
+                        f"A wide view of {topic}. Use the licensed photo only, with its credit."
+                    ),
                     "image_suggestion": (
                         f"A wide photo showing {topic}, used only when the licence allows it."
                     ),
