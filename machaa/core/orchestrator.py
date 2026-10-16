@@ -39,6 +39,6 @@ class DayOneOrchestrator:
         return Route(
             "research",
             False,
-            "Day 1 can search Google or open one public website. "
-            "Try: Open Google and search for simple 2BHK interior design ideas.",
+            "Machaa can search the web, open one public website, or write a Word document. "
+            "Try: Write a Word document about simple 2BHK interior design ideas.",
         )

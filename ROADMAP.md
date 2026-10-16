@@ -36,4 +36,4 @@ The API process runs one browser task at a time. A later queue can run work afte
 
 ## Planning
 
-Day 1 does not ask a model what to do. The sentence is matched by fixed rules. Later planning can choose among the allowlisted tools. The Guardian still has to approve the tool call that planning picked.
+Day 1 matches the sentence with fixed rules. Day 2 asks Gemini only to draft the words of a Word document from notes Machaa already collected. The model does not choose tools. Later planning can choose among the allowlisted tools. The Guardian still has to approve the tool call that planning picked.

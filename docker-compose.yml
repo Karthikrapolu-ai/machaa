@@ -25,6 +25,8 @@ services:
       MACHAA_BRAVE_SEARCH_API_KEY: ${MACHAA_BRAVE_SEARCH_API_KEY:-}
       MACHAA_GOOGLE_SEARCH_API_KEY: ${MACHAA_GOOGLE_SEARCH_API_KEY:-}
       MACHAA_GOOGLE_SEARCH_CX: ${MACHAA_GOOGLE_SEARCH_CX:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       HOME: /data/home
       XDG_CONFIG_HOME: /data/home/.config
       XDG_CACHE_HOME: /data/home/.cache

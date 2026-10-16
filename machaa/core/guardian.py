@@ -23,6 +23,8 @@ ALLOWED_TOOLS = frozenset(
         "browser.extract_text",
         "browser.screenshot",
         "report.save_markdown",
+        "llm.draft_document",
+        "report.save_docx",
     }
 )
 
@@ -32,6 +34,8 @@ ALLOWED_ARGS = {
     "browser.extract_text": frozenset(),
     "browser.screenshot": frozenset(),
     "report.save_markdown": frozenset({"markdown"}),
+    "llm.draft_document": frozenset({"instruction", "sources"}),
+    "report.save_docx": frozenset({"title", "body"}),
 }
 
 # Banking, payment, email, and assistant login sites. Matched on the host.
@@ -238,6 +242,10 @@ class Guardian:
             return self.review_navigation(str(arguments["url"]), resolve=True)
         if tool == "report.save_markdown":
             return self._review_markdown(arguments["markdown"])
+        if tool == "llm.draft_document":
+            return self._review_draft(arguments["instruction"], arguments["sources"])
+        if tool == "report.save_docx":
+            return self._review_docx(arguments["title"], arguments["body"])
         return Decision.allow()
 
     def review_navigation(self, url: str, *, resolve: bool) -> Decision:
@@ -284,6 +292,25 @@ class Guardian:
         except ValueError:
             return Decision.deny("tool", "Machaa blocked this search because the query is invalid.")
         return self.review_navigation(url, resolve=True)
+
+    def _review_draft(self, instruction: object, sources: object) -> Decision:
+        if not isinstance(instruction, str) or not isinstance(sources, str):
+            return Decision.deny("tool", "Machaa blocked this draft because the notes are invalid.")
+        if not instruction.strip() or len(instruction) > 2000 or len(sources) > 12000:
+            return Decision.deny("tool", "Machaa blocked this draft because the notes are invalid.")
+        if PAYMENT_INTENT.search(instruction) or CARD_NUMBER.search(instruction):
+            return Decision.deny("payment", MESSAGES["payment"])
+        if DESTRUCTIVE_INTENT.search(instruction) or DOWNLOAD_INTENT.search(instruction):
+            return Decision.deny("tool", MESSAGES["tool"])
+        return Decision.allow()
+
+    def _review_docx(self, title: object, body: object) -> Decision:
+        # The body is the document being saved, not a new command.
+        if not isinstance(title, str) or not isinstance(body, str):
+            return Decision.deny("tool", "Machaa blocked this Word document because it is invalid.")
+        if not title.strip() or len(title) > 200 or len(body) > MAX_MARKDOWN_LEN:
+            return Decision.deny("tool", "Machaa blocked this Word document because it is invalid.")
+        return Decision.allow()
 
     def _review_markdown(self, markdown: object) -> Decision:
         # Page text is data being saved, not an instruction. Do not scan it

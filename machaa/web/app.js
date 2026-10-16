@@ -11,6 +11,7 @@ const STATUS_LABELS = {
   blocked: "Blocked",
   stopped: "Stopped",
   needs_human: "Needs human",
+  needs_key: "Needs a key",
 };
 
 let pollTimer = 0;
@@ -192,6 +193,15 @@ function renderTask(task) {
     card.append(figure);
   }
 
+  if (task.has_document) {
+    const download = document.createElement("a");
+    download.className = "download";
+    download.dataset.testid = "document";
+    download.href = `/api/tasks/${task.id}/document`;
+    download.textContent = "Download the Word document";
+    card.append(download);
+  }
+
   if (task.has_report) {
     const details = document.createElement("details");
     details.className = "report";
@@ -238,4 +248,21 @@ function safeUrl(value) {
   return "";
 }
 
+async function loadSetup() {
+  const banner = document.querySelector("[data-testid='gemini-setup']");
+  try {
+    const response = await fetch("/api/health");
+    if (!response.ok) {
+      return;
+    }
+    const health = await response.json();
+    if (health.gemini_configured) {
+      banner.hidden = true;
+    }
+  } catch (error) {
+    banner.hidden = false;
+  }
+}
+
+loadSetup();
 refresh();

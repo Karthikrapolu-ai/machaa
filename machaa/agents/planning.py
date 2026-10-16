@@ -5,6 +5,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+_DOCUMENT = re.compile(
+    r"\b(?:write|create|make|draft|prepare)\b.{0,60}\b(?:word document|word doc|\.docx|docx)\b",
+    re.IGNORECASE,
+)
+_TOPIC = re.compile(r"\b(?:about|on|for)\s+(.+)$", re.IGNORECASE)
 _SEARCH_FOR = re.compile(r"\bsearch(?:\s+google)?\s+for\s+(.+)$", re.IGNORECASE)
 _GOOGLE_SEARCH = re.compile(r"\bgoogle\s+search\s+(?:for\s+)?(.+)$", re.IGNORECASE)
 _SEARCH_GOOGLE = re.compile(r"\bsearch\s+google\s+(?:for\s+)?(.+)$", re.IGNORECASE)
@@ -26,6 +31,9 @@ def parse_research_request(instruction: str) -> ResearchPlan | None:
     text = " ".join(instruction.strip().split())
     if not text:
         return None
+    document_query = _document_query(text)
+    if document_query:
+        return ResearchPlan(kind="document", query=document_query)
     query = _search_query(text)
     if query:
         return ResearchPlan(kind="search", query=query)
@@ -33,6 +41,16 @@ def parse_research_request(instruction: str) -> ResearchPlan | None:
     if url and (_VISIT_VERB.search(text) or text.lower().startswith("http")):
         return ResearchPlan(kind="visit", url=url)
     return None
+
+
+def _document_query(text: str) -> str | None:
+    if _DOCUMENT.search(text) is None:
+        return None
+    match = _TOPIC.search(text)
+    query = match.group(1).strip().strip("\"'").rstrip(".") if match else text
+    if not query:
+        return None
+    return query[:300]
 
 
 def _search_query(text: str) -> str | None:

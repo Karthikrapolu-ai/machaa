@@ -11,6 +11,7 @@ Please do not open a public GitHub issue for a security problem. Use the reposit
 The Guardian is enforced in `machaa/tools/gateway.py` before a tool handler runs. A request that looks safe cannot later call a tool that is not on the allowlist. The allowlist is:
 
 - search the public web (Google first, then an optional Brave or Google Programmable Search key, then DuckDuckGo's public HTML form)
+- ask Gemini to draft a Word document from those notes, only when `GEMINI_API_KEY` is set
 - open one public http or https page
 - read visible text
 - take a screenshot
@@ -29,7 +30,7 @@ These requests are refused:
 
 The browser is Playwright's Chromium with `user_data_dir` set to a directory inside Machaa's data folder. That directory is kept between tasks so the session stays on this computer. The code refuses a path outside that folder and refuses a path that looks like a personal Chrome, Chromium, or Edge profile. It does not set a Chrome channel and does not attach to a running browser.
 
-A Google robot check, unusual-traffic page, or consent page is detected and left alone. Machaa does not solve a CAPTCHA, does not use a proxy, and does not pretend to be another browser. The next search source is a configured official API or DuckDuckGo's public HTML form. `needs_human` is used only when every source returns nothing. Optional API keys stay in the environment. They are not written into reports, screenshots, or the page address.
+A Google robot check, unusual-traffic page, or consent page is detected and left alone. Machaa does not solve a CAPTCHA, does not use a proxy, and does not pretend to be another browser. The next search source is a configured official API or DuckDuckGo's public HTML form. `needs_human` is used only when every source returns nothing. Optional API keys stay in the environment. They are not written into reports, screenshots, Word documents, or the page address. Gemini's reply is saved as document text. Machaa does not run it as a command. A Word request with no key stops before any call to Google.
 
 Text from a web page is written into the report. The research plan does not read that text to decide the next action.
 
@@ -45,4 +46,4 @@ Docker Compose binds `127.0.0.1:8787` only, runs as uid 1000, drops capabilities
 
 ## Secrets
 
-Do not commit `.env`, cookies, browser profiles, screenshots, reports, databases, or logs. `.gitignore` is there so those files stay on your machine. `.env.example` lists the optional search key names with empty values. A real key belongs only in `.env` on your machine.
+Do not commit `.env`, cookies, browser profiles, screenshots, reports, databases, or logs. `.gitignore` is there so those files stay on your machine. `.env.example` lists the optional search key names and `GEMINI_API_KEY` with empty values. A real key belongs only in `.env` on your machine.

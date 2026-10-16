@@ -4,7 +4,7 @@ Machaa is an open-source personal AI computer you run on your own machine. You t
 
 Day 1 is deliberately small. It can search Google and open one public website. It cannot spend money, download files, or control your desktop. Those limits are in code, not only in a prompt.
 
-No API key. No cloud account. No login to ChatGPT, Gemini, Gmail, or a bank.
+Search needs no API key and no cloud account. A Word document needs a free Gemini key, explained below. Machaa does not log in to ChatGPT, Gmail, or a bank.
 
 ## Quick start
 
@@ -33,6 +33,25 @@ If Google shows a robot check or a consent page, Machaa leaves that page alone a
 To stop Machaa, click the terminal window and press Ctrl+C.
 
 You do not need Python, an API key, or a GitHub login to run it this way.
+
+## Word documents
+
+Ask Machaa:
+
+```text
+Write a Word document about simple 2BHK interior design ideas
+```
+
+Machaa searches, asks Gemini to write from those results, and puts a Download button on the card. The Word file stays on your computer.
+
+The first time, the page shows where to put the key:
+
+1. Open https://aistudio.google.com/apikey and create a free key.
+2. In the Machaa folder (the same folder as `start.bat`), create a file named `.env` if you do not already have one.
+3. Add this line, with your key after the equals sign: `GEMINI_API_KEY=`
+4. On Windows, click the black Machaa window, press Ctrl+C, then double-click `start.bat` again.
+
+Leave the key out and search still works. The Word request then says **Needs a key** and does not call Gemini.
 
 ## Try a blocked request
 
