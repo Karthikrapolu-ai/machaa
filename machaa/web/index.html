@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MACHAA</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <div class="brand">
+          <span class="mark" aria-hidden="true">M</span>
+          <div>
+            <h1>MACHAA</h1>
+            <p>Personal AI computer</p>
+          </div>
+        </div>
+        <p class="safety">On this computer · Guardian on · Its own browser</p>
+      </header>
+
+      <main id="thread" data-testid="thread" aria-live="polite">
+        <section class="empty" id="empty">
+          <h2>What should Machaa look up?</h2>
+          <p>
+            Day 1 searches Google or opens one public website, then saves a
+            short report and a screenshot. It will not buy anything, download
+            a file, or touch your personal Chrome.
+          </p>
+        </section>
+      </main>
+
+      <form id="composer">
+        <div class="examples">
+          <button type="button" data-example="Open Google and search for simple 2BHK interior design ideas">
+            Search Google
+          </button>
+          <button type="button" data-example="Visit https://example.com and extract the page text">
+            Open a public page
+          </button>
+        </div>
+        <div class="entry">
+          <label class="sr-only" for="instruction">Ask Machaa</label>
+          <textarea
+            id="instruction"
+            data-testid="instruction"
+            rows="2"
+            placeholder="Open Google and search for simple 2BHK interior design ideas"
+          ></textarea>
+          <button type="submit" data-testid="send">Send</button>
+        </div>
+        <p class="hint">Runs locally. Day 1 does not call a paid AI API. Shift+Enter adds a line.</p>
+      </form>
+    </div>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
