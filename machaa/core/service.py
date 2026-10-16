@@ -90,6 +90,17 @@ class TaskService:
             return self._public(record.id)
         record = self.store.create(instruction.strip())
         decision = self.guardian.review_instruction(record.instruction)
+        if decision.allowed:
+            from machaa.memory.recall import describe_last, is_recall
+
+            if is_recall(record.instruction):
+                self.store.finish(
+                    record.id,
+                    status="completed",
+                    summary=describe_last(self.store, record.id),
+                    agent="memory",
+                )
+                return self._public(record.id)
         if not decision.allowed:
             self.store.finish(
                 record.id,

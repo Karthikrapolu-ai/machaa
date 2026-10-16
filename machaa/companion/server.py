@@ -12,7 +12,7 @@ from pathlib import Path
 from machaa.companion.actions import CompanionState, perform
 from machaa.core.errors import CompanionRefused
 
-_MAX_BODY = 200_000
+_MAX_BODY = 12_000_000
 
 
 class CompanionServer:

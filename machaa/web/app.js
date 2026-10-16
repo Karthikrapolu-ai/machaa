@@ -473,6 +473,14 @@ function renderTask(task) {
 
   card.append(top, summary);
 
+  if (task.saved_location) {
+    const saved = document.createElement("p");
+    saved.className = "summary";
+    saved.dataset.testid = "saved-file";
+    saved.textContent = task.saved_location;
+    card.append(saved);
+  }
+
   if (task.steps && task.steps.length) {
     const heading = document.createElement("h3");
     heading.className = "plan-title";
@@ -482,9 +490,14 @@ function renderTask(task) {
     list.className = "steps";
     task.steps.forEach((step) => {
       const item = document.createElement("li");
+      if (step.status === "running") {
+        item.dataset.current = "true";
+      }
       const label = document.createElement("span");
       label.textContent = step.label;
       const state = document.createElement("span");
+      state.dataset.testid = "step-state";
+      state.dataset.status = step.status;
       state.textContent = STEP_LABELS[step.status] || step.status;
       item.append(label, state);
       if (step.detail && (step.status === "failed" || step.status === "blocked")) {

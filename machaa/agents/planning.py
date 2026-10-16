@@ -42,6 +42,18 @@ _DESKTOP = re.compile(
     r"\b(notepad|calculator|file explorer|machaa documents|open machaa)\b",
     re.IGNORECASE,
 )
+_ORGANIZE = re.compile(r"\borganize\b", re.IGNORECASE)
+_SCREENSHOT = re.compile(r"\bscreenshot of (?:my )?(?:screen|desktop)\b", re.IGNORECASE)
+_WORK_FILE = re.compile(r"\b(docx|word document|word doc)\b", re.IGNORECASE)
+_WORK_DELIVERY = re.compile(r"\b(save|open)\b", re.IGNORECASE)
+_WORK_PLACE = re.compile(r"\b(documents|machaa)\b", re.IGNORECASE)
+_BRAND_NAME = re.compile(
+    r"\bfor\s+([A-Z][A-Za-z0-9'&]*(?:\s+[A-Z][A-Za-z0-9'&]*){0,4})"
+)
+_RESEARCH_TOPIC = re.compile(
+    r"\bresearch\s+(.+?)(?:,|\s+and\s+prepare|\s+and\s+create|$)",
+    re.IGNORECASE,
+)
 _PLATFORM_NAMES = {
     "instagram": "Instagram",
     "facebook": "Facebook",
@@ -75,10 +87,15 @@ def parse_research_request(instruction: str) -> ResearchPlan | None:
     query = _search_query(text)
     if query:
         return ResearchPlan(kind="search", query=query)
+    workflow = _workflow_plan(text)
+    if workflow is not None:
+        return workflow
     document_query = _document_query(text)
     if document_query:
         return ResearchPlan(kind="document", query=document_query)
-    if _DESKTOP.search(text):
+    if _DESKTOP.search(text) or (_ORGANIZE.search(text) and ".docx" in text.lower()):
+        return ResearchPlan(kind="desktop", query=text[:300])
+    if _SCREENSHOT.search(text):
         return ResearchPlan(kind="desktop", query=text[:300])
     social = _social_plan(text)
     if social is not None:
@@ -87,6 +104,39 @@ def parse_research_request(instruction: str) -> ResearchPlan | None:
     if url and (_VISIT_VERB.search(text) or text.lower().startswith("http")):
         return ResearchPlan(kind="visit", url=url)
     return None
+
+
+def _workflow_plan(text: str) -> ResearchPlan | None:
+    """A request that researches, writes posts, saves a Word file, and opens it."""
+
+    if _WORK_FILE.search(text) is None or _PLATFORM.search(text) is None:
+        return None
+    if _SOCIAL_ASK.search(text) is None:
+        return None
+    if _WORK_DELIVERY.search(text) is None or _WORK_PLACE.search(text) is None:
+        return None
+    social = _social_plan(text)
+    topic = ""
+    researched = _RESEARCH_TOPIC.search(text)
+    if researched:
+        topic = researched.group(1).strip().strip("\"'").rstrip(".")
+    brand = ""
+    named = _BRAND_NAME.search(text)
+    if named:
+        brand = named.group(1).strip().rstrip(",")
+    if social is not None:
+        topic = topic or social.query or ""
+        brand = brand or social.brand or ""
+    if not topic:
+        topic = text[:300]
+    return ResearchPlan(
+        kind="workflow",
+        query=topic[:300],
+        brand=(brand or "the brand")[:200],
+        platform=(social.platform if social is not None else "Instagram")[:40],
+        audience=(social.audience if social is not None else DEFAULT_AUDIENCE)[:200],
+        tone=_tone(text)[:40],
+    )
 
 
 def _tone(text: str) -> str:

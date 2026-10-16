@@ -340,6 +340,10 @@ header p,
   gap: 4px 12px;
 }
 
+.steps li[data-current="true"] {
+  font-weight: 600;
+}
+
 .plan-title {
   margin: 14px 0 0;
   font-size: 12px;

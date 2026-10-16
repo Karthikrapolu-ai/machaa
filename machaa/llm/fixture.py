@@ -58,6 +58,28 @@ class FixtureGemini:
             for action in actions
         ]
 
+    def plan_workflow(self, instruction: str, feedback: str = "", max_steps: int = 8) -> list[dict]:
+        self.calls += 1
+        from machaa.agents.planning import parse_research_request
+        from machaa.agents.workflow import skeleton_actions
+
+        plan = parse_research_request(instruction)
+        if plan is None or plan.kind != "workflow":
+            plan = parse_research_request(
+                "research interiors, prepare Instagram captions, create a DOCX, "
+                "save it in Documents/Machaa, and open it."
+            )
+        actions = skeleton_actions(plan)[:max_steps]
+        return [
+            {
+                "tool": action.tool,
+                "arguments": action.arguments,
+                "label": action.label,
+                "group": action.group,
+            }
+            for action in actions
+        ]
+
     def plan_desktop(self, instruction: str, feedback: str = "", max_steps: int = 8) -> list[dict]:
         self.calls += 1
         from machaa.agents.desktop import NotepadMemory, local_desktop_actions

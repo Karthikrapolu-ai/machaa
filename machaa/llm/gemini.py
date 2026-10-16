@@ -89,6 +89,12 @@ class GeminiClient:
         text, _model = self._complete(_plan_prompt(instruction, feedback, max_steps))
         return parse_plan(text)
 
+    def plan_workflow(self, instruction: str, feedback: str = "", max_steps: int = 8) -> list:
+        """Ask for a workflow. Machaa still keeps its own safe order."""
+
+        text, _model = self._complete(_workflow_prompt(instruction, feedback, max_steps))
+        return parse_plan(text)
+
     def plan_desktop(self, instruction: str, feedback: str = "", max_steps: int = 8) -> list:
         """Ask for a desktop plan. The caller still has to validate it."""
 
@@ -420,6 +426,29 @@ def _plan_prompt(instruction: str, feedback: str, max_steps: int) -> str:
         "Do not add argument names that are not listed. "
         "For a social post, use search, then a licensed image, then content.write_social. "
         'Return JSON only: {"actions":[{"tool":"...","arguments":{},"label":"..."}]}.\n'
+        f"{repair}"
+        f"Request: {instruction.strip()[:2000]}\n"
+    )
+
+
+def _workflow_prompt(instruction: str, feedback: str, max_steps: int) -> str:
+    repair = ""
+    if feedback.strip():
+        repair = (
+            "The previous plan was rejected: "
+            f"{feedback.strip()[:500]}. Return a different plan that passes.\n"
+        )
+    return (
+        "Turn the request into a JSON list of actions. "
+        f"Use at most {max_steps} actions. "
+        "Search and the licensed-image lookup are independent and share group 0. "
+        "Writing the captions is group 1 and comes after both. "
+        "Allowed tools and their exact argument names are:\n"
+        '- browser.search_google with {"query": "..."}\n'
+        '- image.find_licensed with {"query": "..."}\n'
+        '- content.write_social with {"brand","topic","platform","audience"}\n'
+        "Do not use a shell, a download, a payment, or any other tool. "
+        'Return JSON only: {"actions":[{"tool":"...","arguments":{},"label":"...","group":0}]}.\n'
         f"{repair}"
         f"Request: {instruction.strip()[:2000]}\n"
     )

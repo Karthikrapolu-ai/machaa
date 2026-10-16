@@ -6,6 +6,18 @@ Day 1 is deliberately small. It can search Google and open one public website. I
 
 Search needs no API key and no cloud account. A Word document needs a free Gemini key, explained below. Machaa does not log in to ChatGPT, Gmail, or a bank.
 
+## Days 4–6 on Windows
+
+1. Unzip https://github.com/Karthikrapolu-ai/machaa/archive/refs/heads/cursor/machaa-day6.zip and copy your `.env` file into that folder.
+2. Double-click `START-MACHAA.bat`. The browser opens at **http://127.0.0.1:8787**.
+3. Turn **Desktop control** on in Settings. If a card says **Needs approval**, press **Approve**.
+4. Ask Machaa to research modern 2BHK interiors, prepare 3 Instagram posts for Vistaara Interiors, create a DOCX, save it in Documents/Machaa, and open it.
+5. Then you can ask it to open Notepad and write a summary of that document, or ask what it created in the last task.
+
+Click the microphone in the message box to speak. **Stop** on a card stops the work and says which steps finished. To quit Machaa, double-click `STOP-MACHAA.bat`.
+
+These still need your PC: the microphone, Notepad, Word opening the file, File Explorer, and Docker Desktop.
+
 ## Windows, in three steps
 
 1. Unzip this download. If you already have a Machaa folder, copy your `.env` file into the new folder. Leave it as it is.
