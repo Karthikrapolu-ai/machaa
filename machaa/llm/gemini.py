@@ -463,14 +463,19 @@ def _social_prompt(
     notes = sources.strip()[:6000] or "(No source notes were collected.)"
     picture = image_note.strip()[:1000] or "No reusable image was found."
     return (
-        "Write three social posts. Use only the source notes and the image note. "
-        "Do not invent a photograph, a price, a phone number, or a person. "
+        "Write three different social posts. Use only the source notes and the image note. "
+        "Do not invent a photograph, a price, a phone number, a discount, or a person. "
+        "Do not use filler such as delve, unlock, or elevate your space. "
+        "Each concept needs a hook, a short caption, a longer caption, hashtags, "
+        "a call to action, one format (reel, carousel, or static), and a visual direction. "
+        "The three formats must not all be the same. "
         "Image suggestions are words about what a photo could show. "
         "They are not a claim that a photo exists. "
         "Put source URLs only if they appear in the notes. "
         "Return JSON only with this shape: "
-        '{"title":"...","concepts":[{"name":"...","caption":"...","hashtags":["#tag"],'
-        '"image_suggestion":"...","source_urls":["https://..."]}]}. '
+        '{"title":"...","concepts":[{"name":"...","hook":"...","caption":"...","short_caption":"...",'
+        '"long_caption":"...","cta":"...","format":"reel","hashtags":["#tag"],'
+        '"visual_direction":"...","image_suggestion":"...","source_urls":["https://..."]}]}. '
         "The concepts array must contain exactly three items.\n\n"
         f"Brand: {brand.strip()[:200]}\n"
         f"Platform: {platform.strip()[:40]}\n"

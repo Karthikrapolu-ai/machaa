@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from machaa.core.errors import MachaaError
+from machaa.reports.creative import enrich_concepts
 
 
 class DocumentError(MachaaError):
@@ -67,8 +68,11 @@ def write_social_document(path: Path, payload: dict, image_path: Path | None) ->
     from docx import Document
     from docx.shared import Inches
 
-    concepts = payload.get("concepts") if isinstance(payload, dict) else None
-    if not isinstance(concepts, list) or len(concepts) < 3:
+    raw_concepts = payload.get("concepts") if isinstance(payload, dict) else None
+    if not isinstance(raw_concepts, list) or len(raw_concepts) < 3:
+        raise DocumentError("Machaa could not save the social post document.")
+    concepts = enrich_concepts(raw_concepts, str(payload.get("tone") or ""))
+    if len(concepts) < 3:
         raise DocumentError("Machaa could not save the social post document.")
     path.parent.mkdir(parents=True, exist_ok=True)
     document = Document()
@@ -78,7 +82,8 @@ def write_social_document(path: Path, payload: dict, image_path: Path | None) ->
         f"Brand: {_line(payload.get('brand'))}\n"
         f"Platform: {_line(payload.get('platform'))}\n"
         f"Audience: {_line(payload.get('audience'))}\n"
-        f"Topic: {_line(payload.get('topic'))}"
+        f"Topic: {_line(payload.get('topic'))}\n"
+        f"Tone: {_line(concepts[0].get('tone') if concepts else '')}"
     )
     image = payload.get("image") if isinstance(payload.get("image"), dict) else {}
     document.add_heading("Reference image", level=1)
@@ -108,12 +113,18 @@ def write_social_document(path: Path, payload: dict, image_path: Path | None) ->
             raise DocumentError("Machaa could not save the social post document.")
         name = _line(concept.get("name")) or f"Post {index}"
         document.add_heading(f"Post {index}: {name}"[:160], level=1)
-        caption = _line(concept.get("caption"))
+        caption = _line(concept.get("caption") or concept.get("short_caption"))
         if not caption:
             raise DocumentError("Machaa could not save the social post document.")
+        document.add_paragraph("Hook: " + _line(concept.get("hook"))[:300])
+        document.add_paragraph("Format: " + _line(concept.get("format")))
+        document.add_paragraph("Short caption: " + caption[:800])
         document.add_paragraph(caption[:800])
+        document.add_paragraph("Long caption: " + _line(concept.get("long_caption"))[:1200])
+        document.add_paragraph("Call to action: " + _line(concept.get("cta"))[:300])
         tags = concept.get("hashtags") if isinstance(concept.get("hashtags"), list) else []
         document.add_paragraph("Hashtags: " + " ".join(str(tag) for tag in tags[:8]))
+        document.add_paragraph("Visual direction: " + _line(concept.get("visual_direction"))[:400])
         document.add_paragraph("Image suggestion: " + _line(concept.get("image_suggestion"))[:400])
         urls = concept.get("source_urls") if isinstance(concept.get("source_urls"), list) else []
         kept = [

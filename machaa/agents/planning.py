@@ -51,6 +51,8 @@ _PLATFORM_NAMES = {
     "twitter": "Twitter",
 }
 DEFAULT_AUDIENCE = "people who might hire this brand"
+_TONE_LABEL = re.compile(r"\btone\s*:\s*([A-Za-z][A-Za-z -]{1,30})", re.IGNORECASE)
+_TONE_PHRASE = re.compile(r"\bin an?\s+([A-Za-z][A-Za-z -]{1,30})\s+tone\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ class ResearchPlan:
     brand: str | None = None
     platform: str | None = None
     audience: str | None = None
+    tone: str | None = None
 
 
 def parse_research_request(instruction: str) -> ResearchPlan | None:
@@ -84,6 +87,13 @@ def parse_research_request(instruction: str) -> ResearchPlan | None:
     if url and (_VISIT_VERB.search(text) or text.lower().startswith("http")):
         return ResearchPlan(kind="visit", url=url)
     return None
+
+
+def _tone(text: str) -> str:
+    match = _TONE_LABEL.search(text) or _TONE_PHRASE.search(text)
+    if match is None:
+        return ""
+    return " ".join(match.group(1).split())
 
 
 def _social_plan(text: str) -> ResearchPlan | None:
@@ -125,6 +135,7 @@ def _social_plan(text: str) -> ResearchPlan | None:
         brand=brand[:200],
         platform=platform[:40],
         audience=audience[:200],
+        tone=_tone(text)[:40],
     )
 
 

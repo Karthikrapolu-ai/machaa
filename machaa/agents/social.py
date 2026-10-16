@@ -26,6 +26,7 @@ async def execute_social(agent, task_id: str, task, plan) -> None:
     if reset is not None:
         reset()
     agent._image = None
+    agent._social_tone = getattr(plan, "tone", "") or ""
     agent._latest_hits = []
     agent._draft_model = ""
     page_url = ""
@@ -254,6 +255,7 @@ def social_handlers(agent, workspace, artifacts: Path) -> dict:
             "audience": arguments["audience"],
             "topic": arguments["topic"],
             "concepts": draft["concepts"],
+            "tone": getattr(agent, "_social_tone", "") or "",
             "image": _image_payload(image),
         }
         image_path = image.path if image is not None else None

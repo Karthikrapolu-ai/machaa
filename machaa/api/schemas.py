@@ -7,6 +7,15 @@ class EnabledIn(BaseModel):
     enabled: bool
 
 
+class TrackIn(BaseModel):
+    enabled: bool
+    branch: str = ""
+
+
+class UpdateIn(BaseModel):
+    approved: bool = False
+
+
 class InstructionIn(BaseModel):
     instruction: str = Field(min_length=1, max_length=2000)
 

@@ -6,6 +6,22 @@ Day 1 is deliberately small. It can search Google and open one public website. I
 
 Search needs no API key and no cloud account. A Word document needs a free Gemini key, explained below. Machaa does not log in to ChatGPT, Gmail, or a bank.
 
+## Windows, in three steps
+
+1. Unzip this download. If you already have a Machaa folder, copy your `.env` file into the new folder. Leave it as it is.
+2. Double-click `START-MACHAA.bat`.
+3. Your browser opens at **http://127.0.0.1:8787**.
+
+If the window says Python or Docker is missing, it tells you what to install. Then double-click `START-MACHAA.bat` again. A second double-click does not start a second copy. To stop, double-click `STOP-MACHAA.bat`.
+
+Click the microphone inside the message box to speak. A timer counts the seconds. Stop puts the words in the box so you can edit them before Send. Cancel throws the recording away. Mute, Desktop control, and Listen for Open Machaa are under Settings.
+
+The card shows the real step Machaa is on, such as Searching… or Creating Word document…, and how many seconds it has been working. Stop stays on the card. There is no percentage.
+
+An Instagram request produces three different ideas. Each one has a hook, a short caption, a long caption, hashtags, a call to action, a format (reel, carousel, or static), and a visual direction. You can add `in a warm tone` to the sentence. Machaa does not invent a price. A picture is used only when the licence allows it, and the credit stays in the Word file.
+
+Settings has **Check for updates**. It shows the version you have and the version on the official Machaa repository. Nothing is downloaded until you press **Update now**. A draft, a pull request, or someone else's fork is ignored. **Track a draft branch** is for testing during the build and stays off unless you turn it on. Your `.env` file, browser profile, documents, database, and history are kept. If the new version does not start, Machaa puts the previous one back.
+
 ## Quick start
 
 Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it. Then:
@@ -172,6 +188,18 @@ pytest
 `python -m machaa` starts the same dashboard without Docker, at http://127.0.0.1:8787. Copy `.env.example` to `.env` only if you want to change a port, a limit, or an optional search key. Leave the key lines empty to run with no key. Do not commit a filled-in `.env`.
 
 Runtime files under `data/` (the browser profile, cookies, screenshots, reports, and the database) are gitignored. Do not commit them.
+
+## Checks that need your Windows PC
+
+These were not run on the build machine, because it is not your PC:
+
+- Click the microphone, choose Allow, watch the timer, press Stop, edit the words, then Send.
+- Press Cancel and confirm the words were not kept.
+- Choose Block when Windows asks for the microphone, and read the message on the page.
+- Turn Mute on and off, and try Listen for Open Machaa after the optional voice program is installed.
+- Open Notepad, Calculator, and File Explorer, approve typing and saving, and reject a save.
+- Double-click `START-MACHAA.bat` twice and confirm only one Machaa starts. Then double-click `STOP-MACHAA.bat`.
+- Check for updates, and only then press Update now. Confirm `.env` is still there.
 
 ## License
 

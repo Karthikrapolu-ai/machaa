@@ -280,7 +280,13 @@ async def _companion_call(agent, action: str, arguments: dict) -> dict:
     companion = agent.companion
     if companion is None or not companion.configured():
         raise CompanionUnavailable(COMPANION_HELP)
-    return await asyncio.to_thread(companion.call, action, arguments)
+    try:
+        return await asyncio.to_thread(companion.call, action, arguments)
+    except CompanionUnavailable:
+        await asyncio.sleep(0.05)
+        if companion is None or not companion.configured():
+            raise CompanionUnavailable(COMPANION_HELP)
+        return await asyncio.to_thread(companion.call, action, arguments)
 
 
 def _desktop_on(agent) -> bool:
