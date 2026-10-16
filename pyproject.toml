@@ -1,0 +1,23 @@
+[project]
+name = "machaa"
+version = "0.1.0"
+description = "Machaa is an open-source personal AI computer agent."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "fastapi==0.143.3",
+    "uvicorn==0.54.0",
+    "playwright==1.64.0",
+    "pydantic==2.14.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "browser: tests that launch Chromium",
+    "live_google: searches Google and needs a network Google will answer",
+]
