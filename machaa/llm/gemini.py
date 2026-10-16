@@ -9,7 +9,16 @@ import urllib.request
 
 from machaa.core.errors import MachaaError
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+# Google's current recommendation for a new free-tier project.
+# gemini-2.5-flash still exists, but a new key is often told it is not found.
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
+FALLBACK_MODELS = (
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+)
 KEY_HELP = (
     "Machaa needs a free Gemini key to write this Word document. "
     "In the Machaa folder, open the file named .env (create it if it is missing) "
@@ -50,22 +59,39 @@ class GeminiClient:
             raise MissingKeyError(KEY_HELP)
         if not _MODEL.fullmatch(self.model):
             raise DraftError("Machaa could not use the configured Gemini model name.")
+        prompt = _prompt(instruction, sources)
+        not_found: list[str] = []
+        tried: set[str] = set()
+        queue = [self.model]
+        while queue:
+            model = queue.pop(0)
+            if model in tried or not _MODEL.fullmatch(model):
+                continue
+            tried.add(model)
+            try:
+                draft = self._generate(model, prompt)
+            except _ModelNotFound as missing:
+                not_found.append(f"{model}: {missing.detail}")
+                for name in FALLBACK_MODELS:
+                    if name not in tried and name not in queue:
+                        queue.append(name)
+                continue
+            draft["model"] = model
+            return draft
+        details = " ".join(not_found) or "The model was not found."
+        raise DraftError(f"Gemini did not return a document (HTTP 404). {details}")
+
+    def _generate(self, model: str, prompt: str) -> dict:
         payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": _prompt(instruction, sources)}],
-                }
-            ],
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 0.2,
                 "maxOutputTokens": 2048,
                 "responseMimeType": "application/json",
             },
         }
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent"
+            f"{model}:generateContent"
         )
         request = urllib.request.Request(
             url,
@@ -80,17 +106,20 @@ class GeminiClient:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 raw = response.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as exc:
-            raise DraftError(
-                f"Gemini did not return a document (HTTP {exc.code})."
-            ) from exc
+            detail = _http_detail(exc, self.api_key)
+            if exc.code == 404:
+                raise _ModelNotFound(detail) from exc
+            message = f"Gemini did not return a document (HTTP {exc.code})."
+            if detail:
+                message = f"{message} {detail}"
+            raise DraftError(message) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             raise DraftError("Machaa could not reach Gemini.") from exc
         try:
             body = json.loads(raw)
-            text = body["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+        except json.JSONDecodeError as exc:
             raise DraftError("Gemini did not return a document.") from exc
-        return parse_draft(text)
+        return parse_draft(_answer_text(body))
 
 
 def parse_draft(text: str) -> dict:
@@ -128,6 +157,54 @@ def parse_draft(text: str) -> dict:
     if not sections:
         raise DraftError("Gemini did not return any sections.")
     return {"title": title, "sections": sections}
+
+
+class _ModelNotFound(Exception):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+def _http_detail(exc: urllib.error.HTTPError, api_key: str) -> str:
+    """The message Gemini sent, with the key removed if it was echoed."""
+
+    try:
+        raw = exc.read().decode("utf-8", "replace")
+    except Exception:
+        return ""
+    message = ""
+    try:
+        payload = json.loads(raw)
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            message = str(error.get("message") or "")
+    except json.JSONDecodeError:
+        message = raw
+    message = " ".join(message.split())
+    if api_key:
+        message = message.replace(api_key, "[key]")
+    return message[:500]
+
+
+def _answer_text(body: dict) -> str:
+    try:
+        parts = body["candidates"][0]["content"]["parts"]
+    except (KeyError, IndexError, TypeError) as exc:
+        reason = ""
+        if isinstance(body, dict):
+            feedback = body.get("promptFeedback")
+            if isinstance(feedback, dict):
+                reason = str(feedback.get("blockReason") or "")
+        extra = f" {reason}" if reason else ""
+        raise DraftError(f"Gemini did not return a document.{extra}") from exc
+    texts = [
+        str(part.get("text"))
+        for part in parts
+        if isinstance(part, dict) and part.get("text")
+    ]
+    if not texts:
+        raise DraftError("Gemini did not return a document.")
+    return texts[-1]
 
 
 def _prompt(instruction: str, sources: str) -> str:

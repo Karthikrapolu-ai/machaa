@@ -42,7 +42,7 @@ Ask Machaa:
 Write a Word document about simple 2BHK interior design ideas
 ```
 
-Machaa searches, asks Gemini to write from those results, and puts a Download button on the card. The Word file stays on your computer.
+Machaa searches, asks Gemini to write from those results, and puts a Download button on the card. The Word file stays on your computer. The usual model is Gemini 3.5 Flash-Lite. If Google says that model is missing, Machaa tries the next current model and shows Google's own message on the card if none of them answer.
 
 The first time, the page shows where to put the key:
 

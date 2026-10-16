@@ -44,7 +44,7 @@ class Settings:
     google_search_api_key: str = ""
     google_search_cx: str = ""
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -69,8 +69,8 @@ class Settings:
             google_search_api_key=os.environ.get("MACHAA_GOOGLE_SEARCH_API_KEY", "").strip(),
             google_search_cx=os.environ.get("MACHAA_GOOGLE_SEARCH_CX", "").strip(),
             gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
-            gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
-            or "gemini-2.5-flash",
+            gemini_model=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+            or "gemini-3.5-flash-lite",
         )
 
     def ensure_dirs(self) -> None:

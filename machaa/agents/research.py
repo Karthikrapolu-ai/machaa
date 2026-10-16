@@ -58,6 +58,7 @@ class ResearchAgent:
         self.browser_factory = browser_factory or PlaywrightWorkspace
         self.gemini = gemini_client
         self._latest_hits: list[dict] = []
+        self._draft_model = ""
 
     async def run(self, task_id: str) -> None:
         task = self.store.get(task_id)
@@ -172,6 +173,7 @@ class ResearchAgent:
                         "Save the Word document",
                     )
                     done.append("Saved a Word document.")
+                    self._draft_model = str(drafted.get("model") or "")
                 markdown = render_report(
                     task_id=task_id,
                     instruction=task.instruction,
@@ -277,6 +279,8 @@ class ResearchAgent:
             return
         if plan.kind == "document":
             summary = f"Wrote a Word document about “{plan.query}” and saved it."
+            if self._draft_model:
+                summary = f"{summary} Written with {self._draft_model}."
         elif plan.kind == "search":
             if provider and provider != "google":
                 summary = (
@@ -366,6 +370,7 @@ class ResearchAgent:
                 arguments["instruction"],
                 arguments["sources"],
             )
+            self._draft_model = str(draft.get("model") or "")
             payload = {
                 "sections": draft["sections"],
                 "sources": [
@@ -374,7 +379,11 @@ class ResearchAgent:
                     if str(hit.get("url") or "").startswith("http")
                 ],
             }
-            return {"title": draft["title"], "body": json.dumps(payload)}
+            return {
+                "title": draft["title"],
+                "body": json.dumps(payload),
+                "model": self._draft_model,
+            }
 
         async def save_docx(arguments: dict) -> dict:
             write_brief(artifacts / "brief.docx", arguments["title"], arguments["body"])
