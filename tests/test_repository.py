@@ -18,11 +18,17 @@ def test_gitignore_covers_runtime_state():
 def test_env_example_has_no_secrets():
     text = Path(".env.example").read_text(encoding="utf-8")
     lowered = text.lower()
-    assert "api_key=" not in lowered
     assert "sk-" not in text
     assert "akia" not in lowered
     assert "begin private" not in lowered
     assert "password=" not in lowered
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, _, value = stripped.partition("=")
+        if any(word in name.lower() for word in ("key", "token", "secret", "password")):
+            assert value.strip() == ""
 
 
 def test_compose_is_a_restricted_local_worker():

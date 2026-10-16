@@ -19,5 +19,4 @@ pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
     "browser: tests that launch Chromium",
-    "live_google: searches Google and needs a network Google will answer",
 ]

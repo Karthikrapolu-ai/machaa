@@ -27,7 +27,21 @@ class FakeBrowser:
             "title": "Google Search",
             "text": f"results for {query}",
             "site_blocked": False,
+            "blocked_page": None,
+            "hits": [
+                {
+                    "title": "Example result",
+                    "url": "https://example.com/ideas",
+                    "snippet": f"ideas for {query}",
+                }
+            ],
         }
+
+    async def show_document(self, html: str) -> None:
+        return None
+
+    async def page_title(self) -> str:
+        return "Google Search"
 
     async def visit(self, url: str) -> dict:
         return {

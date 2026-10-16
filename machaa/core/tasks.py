@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-TERMINAL_STATUSES = frozenset({"completed", "failed", "blocked", "stopped"})
+TERMINAL_STATUSES = frozenset(
+    {"completed", "failed", "blocked", "stopped", "needs_human"}
+)
 
 
 def new_task_id() -> str:

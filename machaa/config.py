@@ -1,4 +1,4 @@
-"""Runtime settings. Day 1 has no API keys and no cloud account."""
+"""Runtime settings. Search API keys are optional and stay empty by default."""
 
 from __future__ import annotations
 
@@ -40,6 +40,9 @@ class Settings:
     navigation_timeout_ms: int
     headless: bool
     chromium_no_sandbox: bool
+    brave_search_api_key: str = ""
+    google_search_api_key: str = ""
+    google_search_cx: str = ""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -60,6 +63,9 @@ class Settings:
             navigation_timeout_ms=_int(os.environ.get("MACHAA_NAVIGATION_TIMEOUT_MS"), 30000),
             headless=_bool(os.environ.get("MACHAA_HEADLESS"), True),
             chromium_no_sandbox=_bool(os.environ.get("MACHAA_CHROMIUM_NO_SANDBOX"), False),
+            brave_search_api_key=os.environ.get("MACHAA_BRAVE_SEARCH_API_KEY", "").strip(),
+            google_search_api_key=os.environ.get("MACHAA_GOOGLE_SEARCH_API_KEY", "").strip(),
+            google_search_cx=os.environ.get("MACHAA_GOOGLE_SEARCH_CX", "").strip(),
         )
 
     def ensure_dirs(self) -> None:

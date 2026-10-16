@@ -60,5 +60,20 @@ def test_browser_source_does_not_attach_to_installed_chrome():
     text = Path("machaa/browser/workspace.py").read_text(encoding="utf-8")
     assert "channel=" not in text
     assert "connect_over_cdp" not in text
+    assert "user_agent=" not in text
+    assert "Chrome/131" not in text
     assert "launch_persistent_context" in text
     assert "user_data_dir" in text
+
+
+@pytest.mark.browser
+async def test_profile_file_survives_a_second_launch(tmp_path):
+    profile = tmp_path / "data" / "browser-profile"
+    settings = _settings(tmp_path, profile)
+    async with PlaywrightWorkspace(settings):
+        pass
+    marker = profile / "machaa-profile-marker.txt"
+    marker.write_text("kept", encoding="utf-8")
+    async with PlaywrightWorkspace(settings):
+        assert marker.read_text(encoding="utf-8") == "kept"
+        assert profile.is_dir()

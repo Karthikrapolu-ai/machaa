@@ -10,6 +10,7 @@ const STATUS_LABELS = {
   failed: "Failed",
   blocked: "Blocked",
   stopped: "Stopped",
+  needs_human: "Needs human",
 };
 
 let pollTimer = 0;
@@ -105,7 +106,7 @@ function emptyState() {
   title.textContent = "What should Machaa look up?";
   const copy = document.createElement("p");
   copy.textContent =
-    "Day 1 searches Google or opens one public website, then saves a short report and a screenshot. It will not buy anything, download a file, or touch your personal Chrome.";
+    "Day 1 searches Google or opens one public website, then saves a short report and a screenshot. A Google robot check is left alone and another search source is used. Purchases, downloads, and your personal Chrome stay off limits.";
   section.append(title, copy);
   return section;
 }

@@ -8,30 +8,13 @@ a browser that is already running. The profile path is checked first.
 from __future__ import annotations
 
 import asyncio
-import re
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from machaa.browser.profile import assert_dedicated_profile
 from machaa.browser.urls import google_search_url, is_google_host
 from machaa.config import Settings
-
-# A normal desktop browser string. Playwright's default says "HeadlessChrome",
-# which makes ordinary sites treat the dedicated browser as a test harness.
-_USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-)
-
-_CONSENT_BUTTON = re.compile(
-    r"^(reject all|accept all|i agree|accept everything|reject everything)$",
-    re.IGNORECASE,
-)
-_ROBOT_MARKERS = (
-    "unusual traffic from your computer",
-    "our systems have detected unusual traffic",
-    "detected unusual traffic",
-)
+from machaa.search.providers import fallback_reason
 
 
 class PlaywrightWorkspace:
@@ -77,7 +60,6 @@ class PlaywrightWorkspace:
             accept_downloads=False,
             viewport={"width": 1280, "height": 900},
             locale="en-US",
-            user_agent=_USER_AGENT,
             args=launch_args,
             ignore_https_errors=False,
         )
@@ -116,19 +98,40 @@ class PlaywrightWorkspace:
                 pass
 
     async def search_google(self, query: str) -> dict:
+        """Open Google. A robot check or consent page is returned as-is."""
+
         url = google_search_url(query)
         opened = await self._open(url)
-        await self._dismiss_google_consent()
-        if _host(self._page.url).startswith("consent."):
-            opened = await self._open(url)
-            await self._dismiss_google_consent()
+        if opened.get("blocked_page"):
+            opened["hits"] = []
+            return opened
         await self._search_from_homepage(query)
-        if self._page is not None:
+        if self._page is not None and not _page_reason(self._page.url, "", ""):
             try:
-                await self._page.wait_for_selector("div#search, div#rso, #result-stats", timeout=8000)
+                await self._page.wait_for_selector(
+                    "div#search, div#rso, #result-stats",
+                    timeout=8000,
+                )
             except Exception:
                 pass
-        return await self._describe()
+        described = await self._describe()
+        if described.get("blocked_page"):
+            described["hits"] = []
+            return described
+        described["hits"] = await self._google_hits()
+        return described
+
+    async def show_document(self, html: str) -> None:
+        """Show a results document that was already fetched. Scripts are already gone."""
+
+        if self._page is None:
+            raise RuntimeError("The browser is not open.")
+        await self._page.set_content(html, wait_until="domcontentloaded")
+
+    async def page_title(self) -> str:
+        if self._page is None:
+            return ""
+        return await self._page.title()
 
     async def visit(self, url: str) -> dict:
         await self._open(url)
@@ -166,47 +169,33 @@ class PlaywrightWorkspace:
 
     async def _describe(self) -> dict:
         if self._page is None:
-            return {"url": "", "title": "", "text": "", "site_blocked": True}
+            return {
+                "url": "",
+                "title": "",
+                "text": "",
+                "site_blocked": True,
+                "blocked_page": "unavailable",
+                "hits": [],
+            }
         title = await self._page.title()
         final = self._page.url
         text = await self.extract_text()
+        reason = fallback_reason(final, title, text)
         return {
             "url": final,
             "title": title,
             "text": text,
-            "site_blocked": _looks_like_robot_check(final, title, text),
+            "site_blocked": reason == "robot_check",
+            "blocked_page": reason,
+            "hits": [],
         }
 
-    async def _dismiss_google_consent(self) -> None:
-        """Click a consent button only on a real Google host."""
+    async def _search_from_homepage(self, query: str) -> None:
+        """Submit Google's own search box when the address is the homepage."""
 
         if self._page is None or not is_google_host(_host(self._page.url)):
             return
-        for _ in range(2):
-            clicked = False
-            for target in (self._page, *self._page.frames):
-                locator = target.get_by_role("button", name=_CONSENT_BUTTON)
-                try:
-                    if await locator.count() == 0:
-                        continue
-                    await locator.first.click(timeout=2000)
-                    clicked = True
-                    break
-                except Exception:
-                    continue
-            if not clicked:
-                return
-            try:
-                await self._page.wait_for_load_state("domcontentloaded", timeout=5000)
-            except Exception:
-                return
-            if not is_google_host(_host(self._page.url)):
-                return
-
-    async def _search_from_homepage(self, query: str) -> None:
-        """If Google showed the homepage, submit the search box. Nowhere else."""
-
-        if self._page is None or not is_google_host(_host(self._page.url)):
+        if fallback_reason(self._page.url, "", ""):
             return
         path = urlparse(self._page.url).path
         if path not in {"", "/"}:
@@ -221,13 +210,56 @@ class PlaywrightWorkspace:
         except Exception:
             return
 
+    async def _google_hits(self) -> list[dict]:
+        if self._page is None:
+            return []
+        raw = await self._page.evaluate(
+            """() => {
+                const headings = [...document.querySelectorAll("a h3")];
+                const seen = new Set();
+                const hits = [];
+                for (const heading of headings) {
+                    const link = heading.closest("a");
+                    if (!link) continue;
+                    const href = link.href || "";
+                    const title = (heading.innerText || "").trim();
+                    if (!title || !href.startsWith("http") || seen.has(href)) continue;
+                    seen.add(href);
+                    hits.push({ title, url: href, snippet: "" });
+                    if (hits.length >= 12) break;
+                }
+                return hits;
+            }"""
+        )
+        hits: list[dict] = []
+        for item in raw or []:
+            url = _public_result_url(str(item.get("url") or ""))
+            title = str(item.get("title") or "").strip()
+            host = _host(url)
+            if not title or not url.startswith("http"):
+                continue
+            if is_google_host(host):
+                continue
+            if "/sorry/" in url.lower():
+                continue
+            hits.append({"title": title, "url": url, "snippet": ""})
+            if len(hits) >= 8:
+                break
+        return hits
+
 
 def _host(url: str) -> str:
     return (urlparse(url).hostname or "").lower()
 
 
-def _looks_like_robot_check(url: str, title: str, text: str) -> bool:
-    if "/sorry/" in url.lower():
-        return True
-    blob = f"{title}\n{text[:4000]}".lower()
-    return any(marker in blob for marker in _ROBOT_MARKERS)
+def _page_reason(url: str, title: str, text: str) -> str | None:
+    return fallback_reason(url, title, text)
+
+
+def _public_result_url(url: str) -> str:
+    parsed = urlparse(url)
+    if is_google_host(_host(url)) and parsed.path == "/url":
+        target = parse_qs(parsed.query).get("q", [""])[0]
+        if target.startswith("http"):
+            return target
+    return url

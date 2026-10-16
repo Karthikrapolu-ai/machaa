@@ -16,15 +16,13 @@ pytest
 
 On Windows, activate the virtual environment with `.venv\Scripts\activate`.
 
-`pytest -m "not live_google"` runs the Guardian, API, security, and Chromium smoke tests. It opens `https://example.com`.
-
-`pytest` also runs the live acceptance test, which types the Google search into the dashboard. That test passes only when Google returns results. On some cloud networks Google shows a robot check instead, and the test fails on purpose. Machaa records that as a failed task and still saves the screenshot.
+`pytest` runs the Guardian, API, security, Chromium smoke, and dashboard acceptance tests. The smoke test opens `https://example.com`. The acceptance test searches for interior-design ideas. When Google shows a robot check, the test still expects real result links from the next source. It does not expect anyone to solve that check.
 
 ## What to keep true
 
 - The Guardian stays in the tool gateway. Do not rely on a prompt to block a payment, a download, or a destructive action.
 - Browser code must keep using Playwright's Chromium and the dedicated profile under the data directory. Do not attach to a personal Chrome profile.
-- Do not add a paid API, a cloud resource, or a credential for Day 1 features.
+- Day 1 does not require a paid API or a cloud account. Optional Brave Search and Google Programmable Search keys stay in the environment. Do not commit them.
 - Do not commit `.env`, cookies, `data/`, browser profiles, screenshots, reports, databases, or logs.
 - New browser actions need an allowlist entry, a Guardian check, and a test that a dangerous call does not reach the handler.
 

@@ -26,9 +26,9 @@ Type this and press Send:
 Open Google and search for simple 2BHK interior design ideas
 ```
 
-Machaa opens Chromium, runs the search, and puts a screenshot and a Markdown report on the card. The browser profile is created inside Machaa's own data folder. It is not your Chrome profile, and Machaa will refuse to use that profile.
+Machaa opens Chromium and searches Google. The report lists the result titles and links, and the card shows a screenshot of that results page. The browser profile lives in Machaa's data folder (`data/browser-profile`, or the Docker volume) and is kept for the next time you start Machaa. That profile belongs to Machaa. A personal Chrome profile is refused.
 
-If Google answers, the card says **Completed**. If Google shows a robot check instead of results, Machaa still saves the screenshot and the report, and the card says **Failed**. It does not try to solve that check. A home network usually gets the results. Some cloud networks do not.
+If Google shows a robot check or a consent page, Machaa leaves that page alone and uses DuckDuckGo's public results instead. The card still says **Completed** when those results come back. A person is asked only when every source comes back empty. No API key is required. A free Brave Search key or a free Google Programmable Search key can be added in `.env` if you want those official APIs used first. See `.env.example`.
 
 To stop Machaa, click the terminal window and press Ctrl+C.
 
@@ -44,7 +44,7 @@ The card turns **Blocked**. Chromium does not open. The same thing happens for a
 
 ## What Day 1 does
 
-- Search Google.
+- Search Google, and use DuckDuckGo (or an optional free search API) when Google shows a check.
 - Open one public `http` or `https` website.
 - Read the visible text.
 - Save a Markdown research report and a screenshot.
@@ -105,7 +105,7 @@ python -m playwright install chromium
 pytest
 ```
 
-`python -m machaa` starts the same dashboard without Docker, at http://127.0.0.1:8787. Copy `.env.example` to `.env` only if you want to change a port or a limit. Do not put secrets in it. There are no keys to add.
+`python -m machaa` starts the same dashboard without Docker, at http://127.0.0.1:8787. Copy `.env.example` to `.env` only if you want to change a port, a limit, or an optional search key. Leave the key lines empty to run with no key. Do not commit a filled-in `.env`.
 
 Runtime files under `data/` (the browser profile, cookies, screenshots, reports, and the database) are gitignored. Do not commit them.
 

@@ -41,6 +41,7 @@ async def test_fake_search_saves_a_report_and_screenshot(settings):
     assert report is not None
     text = report.read_text(encoding="utf-8")
     assert "simple 2BHK interior design ideas" in text
+    assert "https://example.com/ideas" in text
     assert "MACHAA research report" in text
     screenshot = service.artifact(finished["id"], "screenshot")
     assert screenshot is not None

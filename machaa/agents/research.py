@@ -16,6 +16,8 @@ from machaa.core.errors import StepLimitReached, TaskStopped, ToolDenied
 from machaa.core.guardian import Guardian
 from machaa.core.tasks import TaskStore, utc_now
 from machaa.reports.writer import render_report
+from machaa.search.providers import provider_label
+from machaa.search.session import perform_search
 from machaa.tools.gateway import ToolGateway
 
 
@@ -78,6 +80,11 @@ class ResearchAgent:
         page_title = ""
         page_text = ""
         site_blocked = False
+        needs_human = False
+        human_note = ""
+        source_note = ""
+        hits: list[dict] = []
+        provider = ""
         done: list[str] = []
         try:
             async with self.browser_factory(self.settings) as workspace:
@@ -89,9 +96,19 @@ class ResearchAgent:
                         gateway,
                         "browser.search_google",
                         {"query": plan.query or ""},
-                        "Search Google",
+                        "Search",
                     )
-                    done.append(f"Searched Google for {plan.query}.")
+                    provider = str(opened.get("provider") or "")
+                    hits = list(opened.get("hits") or [])
+                    source_note = str(opened.get("note") or "")
+                    needs_human = bool(opened.get("needs_human"))
+                    human_note = source_note
+                    if provider and provider != "google":
+                        done.append(
+                            f"Searched for {plan.query} with {provider_label(provider)}."
+                        )
+                    else:
+                        done.append(f"Searched Google for {plan.query}.")
                 else:
                     opened = await self._call(
                         task_id,
@@ -133,6 +150,8 @@ class ResearchAgent:
                     page_text=page_text,
                     steps=done,
                     saved_at=utc_now(),
+                    hits=hits if plan.kind == "search" else None,
+                    source_note=source_note,
                 )
                 await self._call(
                     task_id,
@@ -181,7 +200,19 @@ class ResearchAgent:
                 **_existing_artifacts(artifacts, page_url),
             )
             return
-        if site_blocked:
+        if needs_human:
+            summary = human_note or "Machaa needs a person to finish this search."
+            if plan.query and plan.query not in summary:
+                summary = f"{summary} Query: {plan.query}."
+            self.store.finish(
+                task_id,
+                status="needs_human",
+                summary=summary,
+                agent=self.name,
+                **_existing_artifacts(artifacts, page_url),
+            )
+            return
+        if site_blocked and plan.kind != "search":
             self.store.finish(
                 task_id,
                 status="failed",
@@ -194,7 +225,13 @@ class ResearchAgent:
             )
             return
         if plan.kind == "search":
-            summary = f"Searched Google for “{plan.query}” and saved a report."
+            if provider and provider != "google":
+                summary = (
+                    f"Searched for “{plan.query}” with {provider_label(provider)} "
+                    f"and saved a report."
+                )
+            else:
+                summary = f"Searched Google for “{plan.query}” and saved a report."
         else:
             summary = f"Opened {plan.url} and saved a report."
         self.store.finish(
@@ -238,8 +275,15 @@ class ResearchAgent:
         guardian = self.guardian
 
         async def search_google(arguments: dict) -> dict:
-            opened = await workspace.search_google(arguments["query"])
-            await _refuse_final_url(guardian, workspace, opened["url"])
+            opened = await perform_search(
+                workspace,
+                self.settings,
+                guardian,
+                arguments["query"],
+            )
+            final = str(opened.get("url") or "")
+            if final and not opened.get("needs_human"):
+                await _refuse_final_url(guardian, workspace, final)
             return opened
 
         async def visit_public_page(arguments: dict) -> dict:
