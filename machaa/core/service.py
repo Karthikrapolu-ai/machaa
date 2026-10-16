@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from machaa.agents.planning import parse_research_request
 from machaa.agents.research import ResearchAgent
 from machaa.browser.workspace import PlaywrightWorkspace
 from machaa.config import Settings
@@ -9,23 +10,47 @@ from machaa.core.guardian import Guardian
 from machaa.core.orchestrator import DayOneOrchestrator
 from machaa.core.runner import Runner
 from machaa.core.tasks import TaskStore
+from machaa.llm.fixture import FixtureGemini
+from machaa.llm.gemini import KEY_HELP, GeminiClient
 from machaa.memory.store import LocalMemory
 
 
 class TaskService:
     """The dashboard talks to this object and not to the browser directly."""
 
-    def __init__(self, settings: Settings, browser_factory=None) -> None:
+    def __init__(self, settings: Settings, browser_factory=None, gemini_client=None) -> None:
         self.settings = settings
         self.store = TaskStore(settings.database_path)
         self.guardian = Guardian()
         self.memory = LocalMemory(self.store)
         self.orchestrator = DayOneOrchestrator()
+        self._model_ready = (
+            gemini_client is not None or bool(settings.gemini_api_key) or settings.gemini_fixture
+        )
+        if gemini_client is not None:
+            self.gemini = gemini_client
+        elif settings.gemini_api_key:
+            self.gemini = GeminiClient(
+                settings.gemini_api_key,
+                settings.gemini_model,
+                max_tokens=settings.max_tokens,
+                max_retries=settings.max_retries,
+            )
+        elif settings.gemini_fixture:
+            self.gemini = FixtureGemini()
+        else:
+            self.gemini = GeminiClient(
+                "",
+                settings.gemini_model,
+                max_tokens=settings.max_tokens,
+                max_retries=settings.max_retries,
+            )
         self.research = ResearchAgent(
             settings,
             self.store,
             self.guardian,
             browser_factory or PlaywrightWorkspace,
+            self.gemini,
         )
         self.runner = Runner(settings, self.store, self.research, self.memory)
 
@@ -39,6 +64,15 @@ class TaskService:
                 summary=decision.reason,
                 block_reason=decision.reason,
                 agent="guardian",
+            )
+            return self._public(record.id)
+        plan = parse_research_request(record.instruction)
+        if plan is not None and plan.kind in {"document", "social"} and not self._model_ready:
+            self.store.finish(
+                record.id,
+                status="needs_key",
+                summary=KEY_HELP,
+                agent="research",
             )
             return self._public(record.id)
         route = self.orchestrator.route(record.instruction)
@@ -60,6 +94,18 @@ class TaskService:
             return None
         return record.to_public()
 
+    def pause(self, task_id: str) -> dict | None:
+        record = self.store.request_pause(task_id)
+        if record is None:
+            return None
+        return record.to_public()
+
+    def resume(self, task_id: str) -> dict | None:
+        record = self.store.request_resume(task_id)
+        if record is None:
+            return None
+        return record.to_public()
+
     def get(self, task_id: str) -> dict | None:
         record = self.store.get(task_id)
         if record is None:
@@ -73,7 +119,12 @@ class TaskService:
         record = self.store.get(task_id)
         if record is None:
             return None
-        raw = record.screenshot_path if kind == "screenshot" else record.report_path
+        if kind == "screenshot":
+            raw = record.screenshot_path
+        elif kind == "document":
+            raw = record.document_path
+        else:
+            raw = record.report_path
         if not raw:
             return None
         from pathlib import Path

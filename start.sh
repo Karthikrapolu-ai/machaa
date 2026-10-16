@@ -5,6 +5,8 @@ cd "$(dirname "$0")"
 
 echo "Machaa will be at http://127.0.0.1:8787"
 echo "Leave this window open. Press Ctrl+C to stop."
+echo "Word documents and social posts need GEMINI_API_KEY in a file named .env in this folder."
+echo "Get a free key at https://aistudio.google.com/apikey"
 echo
 
 if ! command -v docker >/dev/null 2>&1; then

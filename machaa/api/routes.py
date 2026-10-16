@@ -27,8 +27,15 @@ def _task_or_404(task_id: str) -> str:
 
 
 @router.get("/api/health")
-def health() -> dict:
-    return {"status": "ok", "product": "MACHAA", "version": __version__, "day": 1}
+def health(request: Request) -> dict:
+    settings = request.app.state.settings
+    return {
+        "status": "ok",
+        "product": "MACHAA",
+        "version": __version__,
+        "day": 2,
+        "gemini_configured": bool(settings.gemini_api_key),
+    }
 
 
 @router.get("/api/tasks")
@@ -59,6 +66,24 @@ def stop_task(task_id: str, request: Request) -> dict:
     return record
 
 
+@router.post("/api/tasks/{task_id}/pause")
+def pause_task(task_id: str, request: Request) -> dict:
+    _task_or_404(task_id)
+    record = _service(request).pause(task_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    return record
+
+
+@router.post("/api/tasks/{task_id}/resume")
+def resume_task(task_id: str, request: Request) -> dict:
+    _task_or_404(task_id)
+    record = _service(request).resume(task_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    return record
+
+
 @router.get("/api/tasks/{task_id}/report")
 def get_report(task_id: str, request: Request) -> PlainTextResponse:
     _task_or_404(task_id)
@@ -79,3 +104,17 @@ def get_screenshot(task_id: str, request: Request) -> FileResponse:
     if path is None:
         raise HTTPException(status_code=404, detail="Screenshot not found.")
     return FileResponse(path, media_type="image/png", headers=_NO_STORE)
+
+
+@router.get("/api/tasks/{task_id}/document")
+def get_document(task_id: str, request: Request) -> FileResponse:
+    _task_or_404(task_id)
+    path = _service(request).artifact(task_id, "document")
+    if path is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename="machaa-brief.docx",
+        headers=_NO_STORE,
+    )

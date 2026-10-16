@@ -170,7 +170,40 @@ header p,
 .pill[data-status="queued"]::before { background: var(--warn); }
 .pill[data-status="blocked"]::before,
 .pill[data-status="failed"]::before { background: var(--danger); }
-.pill[data-status="needs_human"]::before { background: var(--warn); }
+.pill[data-status="needs_human"]::before,
+.pill[data-status="needs_key"]::before { background: var(--warn); }
+
+.banner {
+  margin: 12px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #2a2618;
+}
+
+.banner h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.banner p {
+  margin: 6px 0;
+}
+
+.banner code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.download {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 600;
+}
 
 .summary {
   margin: 10px 0 0;
@@ -188,8 +221,29 @@ header p,
 
 .steps li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
+}
+
+.plan-title {
+  margin: 14px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.step-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .shot {

@@ -22,7 +22,7 @@ On Windows, activate the virtual environment with `.venv\Scripts\activate`.
 
 - The Guardian stays in the tool gateway. Do not rely on a prompt to block a payment, a download, or a destructive action.
 - Browser code must keep using Playwright's Chromium and the dedicated profile under the data directory. Do not attach to a personal Chrome profile.
-- Day 1 does not require a paid API or a cloud account. Optional Brave Search and Google Programmable Search keys stay in the environment. Do not commit them.
+- Day 2 does not require a paid API. Search works with no key. A Word document uses an optional free Gemini key that stays in the environment. Do not commit it. Tests that write a document use a stand-in reply, not a live key.
 - Do not commit `.env`, cookies, `data/`, browser profiles, screenshots, reports, databases, or logs.
 - New browser actions need an allowlist entry, a Guardian check, and a test that a dangerous call does not reach the handler.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from machaa.agents.research import ResearchAgent
 from machaa.config import Settings
@@ -39,8 +40,9 @@ class Runner:
 
     async def run(self, task_id: str) -> None:
         acquired = False
+        started = time.monotonic()
         try:
-            acquired = await self._acquire(task_id)
+            acquired = await self._acquire(task_id, started)
             if not acquired:
                 return
             task = self.store.get(task_id)
@@ -50,8 +52,16 @@ class Runner:
                 self.store.finish(task_id, status="stopped", summary="Stopped.")
                 return
             self.store.set_fields(task_id, status="running", agent="research")
+            remaining = self.settings.task_timeout_seconds - (time.monotonic() - started)
+            if remaining <= 0:
+                self.store.finish(
+                    task_id,
+                    status="failed",
+                    summary="Machaa stopped this task because it took too long.",
+                )
+                return
             try:
-                async with asyncio.timeout(self.settings.task_timeout_seconds):
+                async with asyncio.timeout(remaining):
                     await self.research.run(task_id)
             except TimeoutError:
                 self.store.finish(
@@ -73,14 +83,28 @@ class Runner:
                 self._slots.release()
             self._remember(task_id)
 
-    async def _acquire(self, task_id: str) -> bool:
+    async def _acquire(self, task_id: str, started: float) -> bool:
         while True:
+            if time.monotonic() - started >= self.settings.task_timeout_seconds:
+                task = self.store.get(task_id)
+                if task is not None and task.status not in TERMINAL_STATUSES:
+                    self.store.finish(
+                        task_id,
+                        status="failed",
+                        summary="Machaa stopped this task because it took too long.",
+                    )
+                return False
             task = self.store.get(task_id)
             if task is None or task.status in TERMINAL_STATUSES:
                 return False
             if task.stop_requested:
                 self.store.finish(task_id, status="stopped", summary="Stopped.")
                 return False
+            if task.pause_requested or task.status == "paused":
+                if task.status != "paused":
+                    self.store.set_fields(task_id, status="paused")
+                await asyncio.sleep(0.2)
+                continue
             try:
                 await asyncio.wait_for(self._slots.acquire(), timeout=0.2)
                 return True

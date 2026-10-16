@@ -43,6 +43,11 @@ class Settings:
     brave_search_api_key: str = ""
     google_search_api_key: str = ""
     google_search_cx: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash-lite"
+    max_tokens: int = 8000
+    max_retries: int = 1
+    gemini_fixture: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -66,6 +71,12 @@ class Settings:
             brave_search_api_key=os.environ.get("MACHAA_BRAVE_SEARCH_API_KEY", "").strip(),
             google_search_api_key=os.environ.get("MACHAA_GOOGLE_SEARCH_API_KEY", "").strip(),
             google_search_cx=os.environ.get("MACHAA_GOOGLE_SEARCH_CX", "").strip(),
+            gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
+            gemini_model=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+            or "gemini-3.5-flash-lite",
+            max_tokens=max(1, _int(os.environ.get("MACHAA_MODEL_BUDGET"), 8000)),
+            max_retries=max(0, _int(os.environ.get("MACHAA_MAX_RETRIES"), 1)),
+            gemini_fixture=_bool(os.environ.get("MACHAA_GEMINI_FIXTURE"), False),
         )
 
     def ensure_dirs(self) -> None:

@@ -11,6 +11,17 @@ const STATUS_LABELS = {
   blocked: "Blocked",
   stopped: "Stopped",
   needs_human: "Needs human",
+  needs_key: "Needs a key",
+  paused: "Paused",
+};
+
+const STEP_LABELS = {
+  completed: "Completed",
+  failed: "Failed",
+  blocked: "Blocked",
+  running: "Working",
+  stopped: "Stopped",
+  queued: "Waiting",
 };
 
 let pollTimer = 0;
@@ -58,12 +69,16 @@ document.querySelectorAll("[data-example]").forEach((button) => {
 });
 
 thread.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-testid='stop']");
+  const stop = event.target.closest("[data-testid='stop']");
+  const pause = event.target.closest("[data-testid='pause']");
+  const resume = event.target.closest("[data-testid='resume']");
+  const button = stop || pause || resume;
   if (!button) {
     return;
   }
+  const action = stop ? "stop" : pause ? "pause" : "resume";
   button.disabled = true;
-  await fetch(`/api/tasks/${button.getAttribute("data-id")}/stop`, { method: "POST" });
+  await fetch(`/api/tasks/${button.getAttribute("data-id")}/${action}`, { method: "POST" });
   await refresh();
 });
 
@@ -75,7 +90,7 @@ async function refresh() {
   const payload = await response.json();
   render(payload.tasks || []);
   const active = (payload.tasks || []).some(
-    (task) => task.status === "queued" || task.status === "running",
+    (task) => task.status === "queued" || task.status === "running" || task.status === "paused",
   );
   window.clearTimeout(pollTimer);
   if (active) {
@@ -106,7 +121,7 @@ function emptyState() {
   title.textContent = "What should Machaa look up?";
   const copy = document.createElement("p");
   copy.textContent =
-    "Day 1 searches Google or opens one public website, then saves a short report and a screenshot. A Google robot check is left alone and another search source is used. Purchases, downloads, and your personal Chrome stay off limits.";
+    "Machaa can search the web, open one public website, write a Word document, or prepare a social post. A Google robot check is left alone. Purchases, downloads, and your personal Chrome stay off limits.";
   section.append(title, copy);
   return section;
 }
@@ -133,29 +148,40 @@ function renderTask(task) {
   pill.dataset.status = task.status;
   pill.textContent = STATUS_LABELS[task.status] || task.status;
   top.append(pill);
-  if ((task.status === "running" || task.status === "queued") && !task.stop_requested) {
-    const stop = document.createElement("button");
-    stop.type = "button";
-    stop.className = "stop";
-    stop.dataset.testid = "stop";
-    stop.dataset.id = task.id;
-    stop.textContent = "Stop";
-    top.append(stop);
-  } else if (task.stop_requested && (task.status === "running" || task.status === "queued")) {
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+  if (task.status === "paused" && !task.stop_requested) {
+    actions.append(controlButton("resume", "Resume", task.id), controlButton("stop", "Stop", task.id));
+  } else if ((task.status === "running" || task.status === "queued") && !task.stop_requested) {
+    actions.append(controlButton("pause", "Pause", task.id), controlButton("stop", "Stop", task.id));
+  } else if (task.stop_requested && (task.status === "running" || task.status === "queued" || task.status === "paused")) {
     const stopping = document.createElement("span");
     stopping.className = "meta";
     stopping.textContent = "Stopping";
-    top.append(stopping);
+    actions.append(stopping);
+  }
+  if (actions.childNodes.length) {
+    top.append(actions);
   }
 
   const summary = document.createElement("p");
   summary.className = "summary";
   summary.dataset.testid = "task-summary";
-  summary.textContent = task.summary || (task.status === "running" ? "Working on it." : "Waiting to start.");
+  summary.textContent =
+    task.summary ||
+    (task.status === "paused"
+      ? "Paused."
+      : task.status === "running"
+        ? "Working on it."
+        : "Waiting to start.");
 
   card.append(top, summary);
 
   if (task.steps && task.steps.length) {
+    const heading = document.createElement("h3");
+    heading.className = "plan-title";
+    heading.dataset.testid = "plan";
+    heading.textContent = "Plan";
     const list = document.createElement("ol");
     list.className = "steps";
     task.steps.forEach((step) => {
@@ -163,11 +189,18 @@ function renderTask(task) {
       const label = document.createElement("span");
       label.textContent = step.label;
       const state = document.createElement("span");
-      state.textContent = step.status;
+      state.textContent = STEP_LABELS[step.status] || step.status;
       item.append(label, state);
+      if (step.detail && (step.status === "failed" || step.status === "blocked")) {
+        const error = document.createElement("p");
+        error.className = "step-error";
+        error.dataset.testid = "step-error";
+        error.textContent = step.detail;
+        item.append(error);
+      }
       list.append(item);
     });
-    card.append(list);
+    card.append(heading, list);
   }
 
   const href = safeUrl(task.page_url);
@@ -190,6 +223,15 @@ function renderTask(task) {
     image.src = `/api/tasks/${task.id}/screenshot`;
     figure.append(image);
     card.append(figure);
+  }
+
+  if (task.has_document) {
+    const download = document.createElement("a");
+    download.className = "download";
+    download.dataset.testid = "document";
+    download.href = `/api/tasks/${task.id}/document`;
+    download.textContent = "Download the Word document";
+    card.append(download);
   }
 
   if (task.has_report) {
@@ -223,6 +265,16 @@ async function loadReport(id, node) {
   node.textContent = text;
 }
 
+function controlButton(kind, label, id) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "stop";
+  button.dataset.testid = kind;
+  button.dataset.id = id;
+  button.textContent = label;
+  return button;
+}
+
 function safeUrl(value) {
   if (!value) {
     return "";
@@ -238,4 +290,21 @@ function safeUrl(value) {
   return "";
 }
 
+async function loadSetup() {
+  const banner = document.querySelector("[data-testid='gemini-setup']");
+  try {
+    const response = await fetch("/api/health");
+    if (!response.ok) {
+      return;
+    }
+    const health = await response.json();
+    if (health.gemini_configured) {
+      banner.hidden = true;
+    }
+  } catch (error) {
+    banner.hidden = false;
+  }
+}
+
+loadSetup();
 refresh();

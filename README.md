@@ -4,7 +4,7 @@ Machaa is an open-source personal AI computer you run on your own machine. You t
 
 Day 1 is deliberately small. It can search Google and open one public website. It cannot spend money, download files, or control your desktop. Those limits are in code, not only in a prompt.
 
-No API key. No cloud account. No login to ChatGPT, Gemini, Gmail, or a bank.
+Search needs no API key and no cloud account. A Word document needs a free Gemini key, explained below. Machaa does not log in to ChatGPT, Gmail, or a bank.
 
 ## Quick start
 
@@ -34,6 +34,37 @@ To stop Machaa, click the terminal window and press Ctrl+C.
 
 You do not need Python, an API key, or a GitHub login to run it this way.
 
+## Word documents
+
+Ask Machaa:
+
+```text
+Write a Word document about simple 2BHK interior design ideas
+```
+
+Machaa searches, asks Gemini to write from those results, and puts a Download button on the card. The Word file stays on your computer. The usual model is Gemini 3.5 Flash-Lite. If Google says that model is missing, Machaa tries the next current model and shows Google's own message on the card if none of them answer.
+
+The same key writes a social post. Ask:
+
+```text
+Machaa, prepare an Instagram content document for Vistaara Interiors about affordable premium-looking 2BHK interiors. Research design ideas, find a suitably licensed reference image, and create 3 captions with hashtags.
+```
+
+Machaa checks a short plan before it starts. The plan can search, save a screenshot, look for a reference image, and write the Word file. Every action is checked again when it runs. A shell command is never on that list.
+
+The Word file has three post ideas, captions, hashtags, image suggestions, and the source links. A picture is embedded only when Machaa finds one on Wikimedia Commons or Openverse with a public-domain, CC0, CC BY, or CC BY-SA licence. The artist and the licence are written in the file. If nothing reusable is found, the file contains a grey box labelled as a placeholder, not a photograph.
+
+While a task is running you can press Pause, then Resume, or Stop. A task also stops if it takes more than 120 seconds, more than 8 actions, more than about 8,000 Gemini tokens, or if Gemini says the free quota is used up. A quota problem is retried once, then the card shows Gemini's message.
+
+The first time, the page shows where to put the key:
+
+1. Open https://aistudio.google.com/apikey and create a free key.
+2. In the Machaa folder (the same folder as `start.bat`), create a file named `.env` if you do not already have one.
+3. Add this line, with your key after the equals sign: `GEMINI_API_KEY=`
+4. On Windows, click the black Machaa window, press Ctrl+C, then double-click `start.bat` again.
+
+Leave the key out and search still works. The Word request then says **Needs a key** and does not call Gemini.
+
 ## Try a blocked request
 
 ```text
@@ -48,19 +79,20 @@ The card turns **Blocked**. Chromium does not open. The same thing happens for a
 - Open one public `http` or `https` website.
 - Read the visible text.
 - Save a Markdown research report and a screenshot.
-- Show the task, the steps, and a Stop button in the dashboard.
+- Show the task, the plan, each step's status, a screenshot, the files, and a Stop, Pause, and Resume button.
 - Keep a local history of task ids.
+- Prepare an Instagram (or other platform) content document with three captions.
 
-A task stops on its own if it takes more than 120 seconds or more than 8 actions.
+A task stops on its own if it takes more than 120 seconds, more than 8 actions, or more than its Gemini token budget.
 
 ## What it will not do
 
 - Buy, pay, check out, or type a credit card.
 - Open banking, PayPal, Gmail, ChatGPT, or Gemini.
 - Download a file.
-- Run a shell command, delete files, or shut the computer down.
+- Run a shell command, even when a plan asks for one, or delete files, or shut the computer down.
 - Attach to your personal Chrome, Chromium, or Edge profile.
-- Call a paid AI API. The steps above are fixed. A later release can add planning. See [ROADMAP.md](ROADMAP.md).
+- Call a paid AI API. Search is free. A Word document or social post uses the free Gemini key in `.env`. See [ROADMAP.md](ROADMAP.md).
 
 ## How it is put together
 
