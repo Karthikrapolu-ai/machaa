@@ -1,0 +1,44 @@
+# Local Machaa. This file does not mount the Docker socket, the host home
+# directory, or any personal browser profile. The published port is loopback only.
+
+name: machaa
+
+services:
+  machaa:
+    build: .
+    image: machaa:day1
+    init: true
+    read_only: true
+    user: "1000:1000"
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      MACHAA_HOST: "0.0.0.0"
+      MACHAA_PORT: "8787"
+      MACHAA_DATA_DIR: /data
+      MACHAA_BROWSER_PROFILE: /data/browser-profile
+      MACHAA_HEADLESS: "true"
+      MACHAA_CHROMIUM_NO_SANDBOX: "true"
+      MACHAA_MAX_STEPS: "8"
+      MACHAA_TASK_TIMEOUT_SECONDS: "120"
+      MACHAA_NAVIGATION_TIMEOUT_MS: "30000"
+      HOME: /data/home
+      XDG_CONFIG_HOME: /data/home/.config
+      XDG_CACHE_HOME: /data/home/.cache
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    volumes:
+      - machaa-data:/data
+    tmpfs:
+      - /tmp:rw,nosuid,size=268435456
+    shm_size: "1gb"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    mem_limit: 2g
+    cpus: 2.0
+    restart: "no"
+
+volumes:
+  machaa-data:

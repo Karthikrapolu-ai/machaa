@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python packages
+        run: pip install -r requirements-dev.txt
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run tests
+        # The live Google search is skipped here because GitHub's network
+        # often receives a robot check. Run `pytest` on a home connection
+        # to include it. example.com is still opened in the smoke test.
+        run: pytest -m "not live_google"
