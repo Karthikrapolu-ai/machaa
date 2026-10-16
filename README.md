@@ -65,6 +65,36 @@ The first time, the page shows where to put the key:
 
 Leave the key out and search still works. The Word request then says **Needs a key** and does not call Gemini.
 
+## Windows desktop and voice
+
+On Windows, double-click `start-machaa-windows.bat` instead of `start.bat` when you want Notepad, Calculator, File Explorer, or the microphone. Leave both windows open. Your existing `.env` file stays where it is, including `GEMINI_API_KEY`.
+
+The first time:
+
+1. If Windows says Python is missing, install it once from [python.org](https://www.python.org/downloads/) and tick **Add python.exe to PATH**. Then double-click `start-machaa-windows.bat` again. Search still works from `start.bat` if you skip this.
+2. When you hold **Talk**, Windows asks for the microphone. Choose **Allow**.
+3. Leave User Account Control on. Machaa will not click a Windows security box.
+4. In the page, turn **Desktop control** on before you ask Machaa to open Notepad. It starts off, and you can turn it off again at any time.
+
+You can type these:
+
+```text
+Machaa, open Notepad.
+Machaa, write three Instagram caption ideas for Vistaara Interiors in Notepad.
+Machaa, save this to my Machaa Documents folder.
+Machaa, open Calculator.
+Machaa, open Google and search for modern bedroom interiors.
+Machaa, stop.
+```
+
+Saving or typing waits until you press **Approve**. Reject leaves the file alone. Stop cancels a desktop action that has not run yet. Files go only in your `Documents\Machaa` folder. Machaa types only into the Notepad window it opened.
+
+Hold **Talk** to speak. Machaa does not listen until you hold that button. **Mute** stops the spoken reply immediately. The words are recognised on your computer when the optional voice program is installed (`py -3 -m pip install faster-whisper`). Until then, the page says so and typing still works. Recordings are not saved.
+
+**Listen for Open Machaa** stays off unless you turn it on. With the companion running, typing or saying Open Machaa brings the dashboard forward.
+
+If the card says the Windows Companion is not running, double-click `start-machaa-windows.bat` and leave the companion window open.
+
 ## Try a blocked request
 
 ```text
@@ -90,7 +120,9 @@ A task stops on its own if it takes more than 120 seconds, more than 8 actions, 
 - Buy, pay, check out, or type a credit card.
 - Open banking, PayPal, Gmail, ChatGPT, or Gemini.
 - Download a file.
-- Run a shell command, even when a plan asks for one, or delete files, or shut the computer down.
+- Run a shell command, PowerShell, or a Windows settings change, even when a plan asks for one.
+- Delete files, or shut the computer down.
+- Type into a window it did not open, or save a file outside Documents\Machaa.
 - Attach to your personal Chrome, Chromium, or Edge profile.
 - Call a paid AI API. Search is free. A Word document or social post uses the free Gemini key in `.env`. See [ROADMAP.md](ROADMAP.md).
 
@@ -109,7 +141,7 @@ flowchart TD
   report --> you
 ```
 
-The pieces that are only seams today: the orchestrator, a computer agent, a work/code agent, Postgres with pgvector, a background queue, an optional cloud runtime, and a desktop companion. The folders are in the repository. They do not run yet. [ROADMAP.md](ROADMAP.md) says what they are for, including saying "open Machaa" out loud.
+The Windows Companion is a separate program on your PC. It is not inside the Docker worker. It listens only on this computer, and the dashboard talks to it with a token that stays in `data/` and is not committed. Unrestricted mouse control, a work/code agent, Postgres with pgvector, a background queue, and an optional cloud runtime are still not running. [ROADMAP.md](ROADMAP.md) says what they are for, including saying "open Machaa" out loud.
 
 ## Safety
 

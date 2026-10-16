@@ -8,8 +8,10 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from machaa import __version__
-from machaa.api.schemas import InstructionIn
+from machaa.api.schemas import EnabledIn, InstructionIn
+from machaa.core.errors import VoiceUnavailable
 from machaa.core.service import TaskService
+from machaa.voice.transcribe import MAX_AUDIO_BYTES, transcribe_audio, voice_ready
 
 router = APIRouter()
 _TASK_ID = re.compile(r"^task_[0-9a-f]{32}$")
@@ -29,12 +31,17 @@ def _task_or_404(task_id: str) -> str:
 @router.get("/api/health")
 def health(request: Request) -> dict:
     settings = request.app.state.settings
+    service = _service(request)
     return {
         "status": "ok",
         "product": "MACHAA",
         "version": __version__,
-        "day": 2,
+        "day": 3,
         "gemini_configured": bool(settings.gemini_api_key),
+        "desktop_enabled": bool(service.desktop_enabled),
+        "companion_configured": bool(service.companion.configured()),
+        "wake_enabled": bool(service.wake_enabled),
+        "voice_ready": voice_ready(),
     }
 
 
@@ -73,6 +80,46 @@ def pause_task(task_id: str, request: Request) -> dict:
     if record is None:
         raise HTTPException(status_code=404, detail="Task not found.")
     return record
+
+
+@router.post("/api/tasks/{task_id}/approve")
+def approve_task(task_id: str, request: Request) -> dict:
+    _task_or_404(task_id)
+    record = _service(request).approve(task_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    return record
+
+
+@router.post("/api/tasks/{task_id}/reject")
+def reject_task(task_id: str, request: Request) -> dict:
+    _task_or_404(task_id)
+    record = _service(request).reject(task_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    return record
+
+
+@router.post("/api/desktop/permission")
+def desktop_permission(body: EnabledIn, request: Request) -> dict:
+    return _service(request).set_desktop(body.enabled)
+
+
+@router.post("/api/voice/wake")
+def voice_wake(body: EnabledIn, request: Request) -> dict:
+    return _service(request).set_wake(body.enabled)
+
+
+@router.post("/api/voice/transcribe")
+async def transcribe(request: Request) -> dict:
+    data = await request.body()
+    if len(data) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="That recording was too long. You can still type.")
+    try:
+        text = transcribe_audio(data)
+    except VoiceUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    return {"text": text}
 
 
 @router.post("/api/tasks/{task_id}/resume")

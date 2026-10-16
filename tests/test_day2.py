@@ -235,7 +235,7 @@ def test_health_says_when_the_key_is_missing(settings):
 
     client = TestClient(create_app(settings, FakeBrowser))
     body = client.get("/api/health").json()
-    assert body["day"] == 2
+    assert body["day"] == 3
     assert body["gemini_configured"] is False
     page = client.get("/")
     assert "GEMINI_API_KEY" in page.text

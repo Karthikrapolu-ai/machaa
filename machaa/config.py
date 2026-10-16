@@ -48,6 +48,9 @@ class Settings:
     max_tokens: int = 8000
     max_retries: int = 1
     gemini_fixture: bool = False
+    companion_url: str = ""
+    companion_token: str = ""
+    documents_dir: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -77,6 +80,11 @@ class Settings:
             max_tokens=max(1, _int(os.environ.get("MACHAA_MODEL_BUDGET"), 8000)),
             max_retries=max(0, _int(os.environ.get("MACHAA_MAX_RETRIES"), 1)),
             gemini_fixture=_bool(os.environ.get("MACHAA_GEMINI_FIXTURE"), False),
+            companion_url=os.environ.get("MACHAA_COMPANION_URL", "").strip(),
+            companion_token=os.environ.get("MACHAA_COMPANION_TOKEN", "").strip(),
+            documents_dir=Path(os.environ["MACHAA_DOCUMENTS_DIR"]).expanduser()
+            if os.environ.get("MACHAA_DOCUMENTS_DIR", "").strip()
+            else None,
         )
 
     def ensure_dirs(self) -> None:

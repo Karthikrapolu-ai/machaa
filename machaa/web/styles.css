@@ -171,7 +171,45 @@ header p,
 .pill[data-status="blocked"]::before,
 .pill[data-status="failed"]::before { background: var(--danger); }
 .pill[data-status="needs_human"]::before,
-.pill[data-status="needs_key"]::before { background: var(--warn); }
+.pill[data-status="needs_key"]::before,
+.pill[data-status="needs_approval"]::before,
+.pill[data-status="paused"]::before { background: var(--warn); }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+}
+
+.talk {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mic {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.switch {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text);
+  font-size: 14px;
+}
 
 .banner {
   margin: 12px 0 0;

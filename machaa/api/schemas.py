@@ -3,6 +3,10 @@
 from pydantic import BaseModel, Field, field_validator
 
 
+class EnabledIn(BaseModel):
+    enabled: bool
+
+
 class InstructionIn(BaseModel):
     instruction: str = Field(min_length=1, max_length=2000)
 

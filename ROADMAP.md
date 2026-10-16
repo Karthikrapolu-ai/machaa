@@ -32,7 +32,7 @@ The API process runs one browser task at a time. A later queue can run work afte
 
 ## Desktop companion and voice
 
-`machaa/companion` is the place for a local app that sits on the owner's machine. Voice activation, including the phrase "open Machaa", belongs there. It is not implemented. The companion must not point Machaa at a personal Chrome profile.
+`machaa/companion` runs on the owner's Windows PC, outside Docker. It can open Notepad, Calculator, and File Explorer, type into the Notepad it opened, and save a text file in Documents\Machaa after approval. The phrase "open Machaa" focuses the dashboard while that companion is running. Optional wake listening stays off unless the owner turns it on. The companion must not point Machaa at a personal Chrome profile. Unrestricted mouse and keyboard control are still not built.
 
 ## Planning
 

@@ -45,7 +45,7 @@ Docker Compose binds `127.0.0.1:8787` only, runs as uid 1000, drops capabilities
 - There is no login. Anyone who can open `http://127.0.0.1:8787` on that computer can send a task. Do not publish the port.
 - The host denylist is a list, not a complete catalog of every payment site.
 - A public website can still be malicious content. Machaa will not follow its instructions, but you should read the report before acting on it.
-- Voice activation ("open Machaa") and personal desktop control are not built. Do not assume they are sandboxed until they exist and have their own review. Social planning is limited to the allowlist above.
+- The Windows Companion is a separate process on the PC. It binds to 127.0.0.1 only and checks a bearer token on every request. The browser never sees that token. Desktop control is off until the owner turns it on, and it can be turned off immediately. Typing, saving, and reading a file wait for Approve and stay inside Documents\Machaa. The companion will not type into a window it did not open, will not run PowerShell, and will not click a UAC or other Windows security prompt. Voice is push-to-talk. Audio is not saved and is not sent off the computer. Optional listening for "open Machaa" stays off unless the owner turns it on. A personal Chrome profile is still refused.
 - Memory is a local SQLite file. Postgres and pgvector are not running and are not a security boundary yet.
 
 ## Secrets

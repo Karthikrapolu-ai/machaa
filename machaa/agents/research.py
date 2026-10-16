@@ -11,6 +11,7 @@ import asyncio
 import time
 from pathlib import Path
 
+from machaa.agents.desktop import NotepadMemory, desktop_handlers, execute_desktop
 from machaa.agents.planning import parse_research_request
 from machaa.agents.social import execute_social, social_handlers
 from machaa.browser.workspace import PlaywrightWorkspace
@@ -68,12 +69,23 @@ class ResearchAgent:
         guardian: Guardian,
         browser_factory=None,
         gemini_client=None,
+        companion=None,
+        desktop_enabled=None,
+        notes=None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.guardian = guardian
         self.browser_factory = browser_factory or PlaywrightWorkspace
         self.gemini = gemini_client
+        self.companion = companion
+        self.desktop_enabled = desktop_enabled or (lambda: False)
+        self.notes = notes if notes is not None else NotepadMemory()
+        self.documents_dir = (
+            settings.documents_dir
+            if getattr(settings, "documents_dir", None) is not None
+            else settings.data_dir / "Documents" / "Machaa"
+        )
         self._latest_hits: list[dict] = []
         self._draft_model = ""
         self._image = None
@@ -86,6 +98,9 @@ class ResearchAgent:
         if reset is not None:
             reset()
         plan = parse_research_request(task.instruction)
+        if plan is not None and plan.kind == "desktop":
+            await execute_desktop(self, task_id, task, plan)
+            return
         if plan is not None and plan.kind == "social":
             await execute_social(self, task_id, task, plan)
             return
@@ -427,6 +442,7 @@ class ResearchAgent:
             "report.save_docx": save_docx,
         }
         handlers.update(social_handlers(self, workspace, artifacts))
+        handlers.update(desktop_handlers(self, workspace, artifacts))
         return handlers
 
 

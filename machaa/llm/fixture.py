@@ -58,6 +58,16 @@ class FixtureGemini:
             for action in actions
         ]
 
+    def plan_desktop(self, instruction: str, feedback: str = "", max_steps: int = 8) -> list[dict]:
+        self.calls += 1
+        from machaa.agents.desktop import NotepadMemory, local_desktop_actions
+
+        actions = local_desktop_actions(instruction, NotepadMemory())[:max_steps]
+        return [
+            {"tool": action.tool, "arguments": action.arguments, "label": action.label}
+            for action in actions
+        ]
+
     def write_social(
         self,
         brand: str,

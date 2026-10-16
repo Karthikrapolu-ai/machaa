@@ -27,6 +27,14 @@ ALLOWED_TOOLS = frozenset(
         "report.save_docx",
         "image.find_licensed",
         "content.write_social",
+        "desktop.open_notepad",
+        "desktop.open_calculator",
+        "desktop.open_explorer",
+        "desktop.open_website",
+        "desktop.type_notepad",
+        "desktop.save_text",
+        "desktop.read_file",
+        "desktop.focus_dashboard",
     }
 )
 
@@ -40,7 +48,17 @@ ALLOWED_ARGS = {
     "report.save_docx": frozenset({"title", "body"}),
     "image.find_licensed": frozenset({"query"}),
     "content.write_social": frozenset({"brand", "topic", "platform", "audience"}),
+    "desktop.open_notepad": frozenset(),
+    "desktop.open_calculator": frozenset(),
+    "desktop.open_explorer": frozenset(),
+    "desktop.open_website": frozenset({"url"}),
+    "desktop.type_notepad": frozenset({"text"}),
+    "desktop.save_text": frozenset({"filename", "text"}),
+    "desktop.read_file": frozenset({"filename"}),
+    "desktop.focus_dashboard": frozenset(),
 }
+
+_SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,60}\.(?:txt|md)$")
 
 # Banking, payment, email, and assistant login sites. Matched on the host.
 BLOCKED_HOST_SUFFIXES = (
@@ -143,7 +161,7 @@ PAYMENT_INTENT = re.compile(
     r"buy|purchase|purchasing|"
     r"checkout|check\s*out|"
     r"add\s+to\s+cart|place\s+(an\s+)?order|"
-    r"pay|pays|payment|payments|"
+    r"pay|pays|payment|payments|banking|"
     r"credit\s*cards?|debit\s*cards?|"
     r"cvv|cvc|card\s*numbers?|"
     r"wire\s+transfers?|bank\s+transfers?|send\s+money|"
@@ -190,7 +208,25 @@ MESSAGES = {
     "tool": (
         "Machaa blocked this action because it is not on the allowlist of safe browser actions."
     ),
+    "settings": (
+        "Machaa blocked this because it asks to change Windows settings, "
+        "bypass a security prompt, or run a command."
+    ),
 }
+
+_CREDENTIALS = re.compile(
+    r"\b(my passwords?|saved passwords?|credentials?|login details)\b",
+    re.IGNORECASE,
+)
+_SYSTEM_CONTROL = re.compile(
+    r"\b("
+    r"system settings|control panel|regedit|registry editor|"
+    r"powershell|command prompt|cmd\.exe|"
+    r"bypass (the )?uac|user account control|"
+    r"task manager|disk management"
+    r")\b",
+    re.IGNORECASE,
+)
 
 MAX_MARKDOWN_LEN = 100_000
 
@@ -224,6 +260,13 @@ class Guardian:
             return Decision.deny("destructive", MESSAGES["destructive"])
         if DOWNLOAD_INTENT.search(instruction):
             return Decision.deny("download", MESSAGES["download"])
+        if _SYSTEM_CONTROL.search(instruction):
+            return Decision.deny("destructive", MESSAGES["settings"])
+        if _CREDENTIALS.search(instruction):
+            return Decision.deny(
+                "destructive",
+                "Machaa blocked this because it asks for a password or saved login.",
+            )
         for url in urls_in_text(instruction):
             decision = self.review_navigation(url, resolve=False)
             if not decision.allowed:
@@ -254,6 +297,14 @@ class Guardian:
             return self._review_image_query(arguments["query"])
         if tool == "content.write_social":
             return self._review_social(arguments)
+        if tool == "desktop.open_website":
+            return self.review_navigation(str(arguments["url"]), resolve=True)
+        if tool == "desktop.type_notepad":
+            return self._review_typed_text(arguments["text"])
+        if tool == "desktop.save_text":
+            return self._review_save(arguments["filename"], arguments["text"])
+        if tool == "desktop.read_file":
+            return self._review_filename(arguments["filename"])
         return Decision.allow()
 
     def review_planned_call(self, tool: str, arguments: dict) -> Decision:
@@ -268,6 +319,8 @@ class Guardian:
         if tool == "browser.search_google":
             return self._review_search(arguments["query"], resolve=False)
         if tool == "browser.visit_public_page":
+            return self.review_navigation(str(arguments["url"]), resolve=False)
+        if tool == "desktop.open_website":
             return self.review_navigation(str(arguments["url"]), resolve=False)
         return self.review_tool_call(tool, arguments)
 
@@ -345,6 +398,28 @@ class Guardian:
         if DESTRUCTIVE_INTENT.search(text) or DOWNLOAD_INTENT.search(text):
             return Decision.deny("tool", MESSAGES["tool"])
         return Decision.allow()
+
+    def _review_typed_text(self, text: object) -> Decision:
+        # The text is what gets typed. It is not a new command.
+        if not isinstance(text, str):
+            return Decision.deny("tool", "Machaa blocked this typing because the text is invalid.")
+        if not text.strip() or len(text) > 8000 or "\x00" in text:
+            return Decision.deny("tool", "Machaa blocked this typing because the text is invalid.")
+        return Decision.allow()
+
+    def _review_filename(self, filename: object) -> Decision:
+        if not isinstance(filename, str) or _SAFE_FILENAME.fullmatch(filename.strip()) is None:
+            return Decision.deny(
+                "tool",
+                "Machaa will only use a simple .txt or .md name inside the Machaa Documents folder.",
+            )
+        return Decision.allow()
+
+    def _review_save(self, filename: object, text: object) -> Decision:
+        name = self._review_filename(filename)
+        if not name.allowed:
+            return name
+        return self._review_typed_text(text)
 
     def _review_draft(self, instruction: object, sources: object) -> Decision:
         if not isinstance(instruction, str) or not isinstance(sources, str):
