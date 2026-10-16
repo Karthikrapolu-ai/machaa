@@ -49,6 +49,8 @@ async def test_dashboard_search_and_payment_block(tmp_path):
     data = tmp_path / "data"
     log_path = tmp_path / "server.log"
     env = os.environ.copy()
+    env.pop("MACHAA_GEMINI_FIXTURE", None)
+    env["GEMINI_API_KEY"] = ""
     env.update(
         {
             "MACHAA_HOST": "127.0.0.1",

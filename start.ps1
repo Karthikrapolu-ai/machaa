@@ -3,7 +3,7 @@ Set-Location -Path $PSScriptRoot
 
 Write-Host "Machaa will be at http://127.0.0.1:8787"
 Write-Host "Leave this window open. Press Ctrl+C to stop."
-Write-Host "Word documents need GEMINI_API_KEY in a file named .env in this folder."
+Write-Host "Word documents and social posts need GEMINI_API_KEY in a file named .env in this folder."
 Write-Host "Get a free key at https://aistudio.google.com/apikey"
 Write-Host ""
 

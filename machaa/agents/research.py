@@ -1,20 +1,23 @@
-"""Research agent for Day 1.
+"""Research agent.
 
-The plan is fixed: search or open one public page, screenshot it, read
-the visible text, and save a Markdown report. Text from the page is
-saved. It is not treated as a new command.
+Search and Word documents keep a fixed list of steps. A social post asks
+the planner for a short list, and the Guardian checks that list before
+the browser starts. Text from a page is saved. It is not a new command.
 """
 
 from __future__ import annotations
 
+import asyncio
+import time
 from pathlib import Path
 
 from machaa.agents.planning import parse_research_request
+from machaa.agents.social import execute_social, social_handlers
 from machaa.browser.workspace import PlaywrightWorkspace
 from machaa.config import Settings
 from machaa.core.errors import StepLimitReached, TaskStopped, ToolDenied
 from machaa.core.guardian import Guardian
-from machaa.core.tasks import TaskStore, utc_now
+from machaa.core.tasks import TERMINAL_STATUSES, TaskStore, utc_now
 from machaa.llm.gemini import DraftError, MissingKeyError
 from machaa.reports.docx_writer import DocumentError, write_brief
 from machaa.reports.writer import render_report
@@ -24,16 +27,30 @@ from machaa.tools.gateway import ToolGateway
 
 
 class StepBudget:
-    """Count actions and notice a stop request between them."""
+    """Count actions and wait while the owner has paused the task."""
 
-    def __init__(self, max_steps: int, should_stop) -> None:
+    def __init__(self, max_steps: int, store: TaskStore, task_id: str, deadline: float) -> None:
         self.max_steps = max_steps
-        self.should_stop = should_stop
+        self.store = store
+        self.task_id = task_id
+        self.deadline = deadline
         self.used = 0
 
-    def consume(self) -> None:
-        if self.should_stop():
-            raise TaskStopped()
+    async def consume(self) -> None:
+        while True:
+            if time.monotonic() >= self.deadline:
+                raise TimeoutError()
+            task = self.store.get(self.task_id)
+            if task is None or task.stop_requested or task.status == "stopped":
+                raise TaskStopped()
+            if task.status in TERMINAL_STATUSES:
+                raise TaskStopped()
+            if task.pause_requested or task.status == "paused":
+                if task.status != "paused":
+                    self.store.set_fields(self.task_id, status="paused")
+                await asyncio.sleep(0.2)
+                continue
+            break
         if self.used >= self.max_steps:
             raise StepLimitReached()
         self.used += 1
@@ -59,12 +76,19 @@ class ResearchAgent:
         self.gemini = gemini_client
         self._latest_hits: list[dict] = []
         self._draft_model = ""
+        self._image = None
 
     async def run(self, task_id: str) -> None:
         task = self.store.get(task_id)
         if task is None:
             return
+        reset = getattr(self.gemini, "reset_budget", None)
+        if reset is not None:
+            reset()
         plan = parse_research_request(task.instruction)
+        if plan is not None and plan.kind == "social":
+            await execute_social(self, task_id, task, plan)
+            return
         if plan is None:
             self.store.finish(
                 task_id,
@@ -80,7 +104,9 @@ class ResearchAgent:
         artifacts.mkdir(parents=True, exist_ok=True)
         budget = StepBudget(
             self.settings.max_steps,
-            lambda: bool(self.store.get(task_id) and self.store.get(task_id).stop_requested),
+            self.store,
+            task_id,
+            time.monotonic() + self.settings.task_timeout_seconds,
         )
         page_url = ""
         page_title = ""
@@ -308,7 +334,7 @@ class ResearchAgent:
         arguments: dict,
         label: str,
     ) -> dict:
-        budget.consume()
+        await budget.consume()
         step_id = self.store.add_step(
             task_id,
             tool=tool,
@@ -322,9 +348,10 @@ class ResearchAgent:
             self.store.finish_step(step_id, "blocked", denied.reason)
             raise
         except Exception as exc:
-            self.store.finish_step(step_id, "failed", exc.__class__.__name__)
+            message = str(exc).strip() or exc.__class__.__name__
+            self.store.finish_step(step_id, "failed", message[:500])
             raise
-        detail = str(result.get("url") or "")[:500]
+        detail = str(result.get("detail") or result.get("url") or "")[:500]
         self.store.finish_step(step_id, "completed", detail)
         return result
 
@@ -338,6 +365,7 @@ class ResearchAgent:
                 guardian,
                 arguments["query"],
             )
+            self._latest_hits = list(opened.get("hits") or [])
             final = str(opened.get("url") or "")
             if final and not opened.get("needs_human"):
                 await _refuse_final_url(guardian, workspace, final)
@@ -389,7 +417,7 @@ class ResearchAgent:
             write_brief(artifacts / "brief.docx", arguments["title"], arguments["body"])
             return {"saved": True}
 
-        return {
+        handlers = {
             "browser.search_google": search_google,
             "browser.visit_public_page": visit_public_page,
             "browser.extract_text": extract_text,
@@ -398,6 +426,8 @@ class ResearchAgent:
             "llm.draft_document": draft_document,
             "report.save_docx": save_docx,
         }
+        handlers.update(social_handlers(self, workspace, artifacts))
+        return handlers
 
 
 async def _refuse_final_url(guardian: Guardian, workspace, url: str) -> None:

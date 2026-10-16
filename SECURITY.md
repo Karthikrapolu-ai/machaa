@@ -16,8 +16,12 @@ The Guardian is enforced in `machaa/tools/gateway.py` before a tool handler runs
 - read visible text
 - take a screenshot
 - save that task's Markdown report
+- search Wikimedia Commons and Openverse for one reusable image (public domain, CC0, CC BY, or CC BY-SA)
+- write a social-post Word document from the notes and that image credit
 
-Everything else is denied. That includes a shell, a click tool, a download tool, and any browser profile other than Machaa's.
+A social request is turned into a short plan first. The Guardian checks every action in that plan before the browser starts, and checks again when the action runs. The plan cannot add a shell command or any tool that is not on the list above. Page text is still saved as text. It is not treated as a new command.
+
+Everything else is denied. That includes a shell, a click tool, an installer download, and any browser profile other than Machaa's. An image is fetched only from Wikimedia or Openverse, only over https, and only when the licence is reusable. Otherwise the document gets a labelled placeholder, not a made-up photo.
 
 These requests are refused:
 
@@ -41,7 +45,7 @@ Docker Compose binds `127.0.0.1:8787` only, runs as uid 1000, drops capabilities
 - There is no login. Anyone who can open `http://127.0.0.1:8787` on that computer can send a task. Do not publish the port.
 - The host denylist is a list, not a complete catalog of every payment site.
 - A public website can still be malicious content. Machaa will not follow its instructions, but you should read the report before acting on it.
-- Advanced planning, voice activation ("open Machaa"), and personal desktop control are not built. Do not assume they are sandboxed until they exist and have their own review.
+- Voice activation ("open Machaa") and personal desktop control are not built. Do not assume they are sandboxed until they exist and have their own review. Social planning is limited to the allowlist above.
 - Memory is a local SQLite file. Postgres and pgvector are not running and are not a security boundary yet.
 
 ## Secrets

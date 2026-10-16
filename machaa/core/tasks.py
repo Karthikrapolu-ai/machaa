@@ -57,6 +57,7 @@ class TaskRecord:
     document_path: str | None
     page_url: str | None
     stop_requested: bool
+    pause_requested: bool
     created_at: str
     updated_at: str
     steps: list[StepRecord]
@@ -73,6 +74,7 @@ class TaskRecord:
             "block_reason": self.block_reason,
             "page_url": self.page_url,
             "stop_requested": self.stop_requested,
+            "pause_requested": self.pause_requested,
             "has_screenshot": bool(self.screenshot_path),
             "has_report": bool(self.report_path),
             "has_document": bool(self.document_path),
@@ -107,6 +109,7 @@ class TaskStore:
                     page_url TEXT,
                     document_path TEXT,
                     stop_requested INTEGER NOT NULL DEFAULT 0,
+                    pause_requested INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -135,6 +138,10 @@ class TaskStore:
             }
             if "document_path" not in columns:
                 self._connection.execute("ALTER TABLE tasks ADD COLUMN document_path TEXT")
+            if "pause_requested" not in columns:
+                self._connection.execute(
+                    "ALTER TABLE tasks ADD COLUMN pause_requested INTEGER NOT NULL DEFAULT 0"
+                )
             self._connection.commit()
 
     def create(self, instruction: str) -> TaskRecord:
@@ -197,6 +204,7 @@ class TaskStore:
             "page_url",
             "document_path",
             "stop_requested",
+            "pause_requested",
         }
         unknown = set(fields) - allowed
         if unknown:
@@ -204,7 +212,10 @@ class TaskStore:
         if not fields:
             return
         assignments = ", ".join(f"{name} = ?" for name in fields)
-        values = [int(value) if name == "stop_requested" else value for name, value in fields.items()]
+        values = [
+            int(bool(value)) if name in {"stop_requested", "pause_requested"} else value
+            for name, value in fields.items()
+        ]
         values.append(utc_now())
         values.append(task_id)
         with self._lock:
@@ -220,10 +231,28 @@ class TaskStore:
             return None
         if task.status in TERMINAL_STATUSES:
             return task
-        if task.status == "queued":
+        if task.status in {"queued", "paused"}:
             self.finish(task_id, status="stopped", summary="Stopped.", stop_requested=True)
         else:
             self.set_fields(task_id, stop_requested=True)
+        return self.get(task_id)
+
+    def request_pause(self, task_id: str) -> TaskRecord | None:
+        task = self.get(task_id)
+        if task is None or task.status in TERMINAL_STATUSES or task.status == "paused":
+            return task
+        self.set_fields(task_id, pause_requested=True)
+        if task.status == "queued":
+            self.set_fields(task_id, status="paused")
+        return self.get(task_id)
+
+    def request_resume(self, task_id: str) -> TaskRecord | None:
+        task = self.get(task_id)
+        if task is None or task.status in TERMINAL_STATUSES:
+            return task
+        self.set_fields(task_id, pause_requested=False)
+        if task.status == "paused":
+            self.set_fields(task_id, status="running" if task.agent else "queued")
         return self.get(task_id)
 
     def add_step(
@@ -350,6 +379,7 @@ def _task_from_row(row: sqlite3.Row, steps: list[sqlite3.Row]) -> TaskRecord:
         page_url=row["page_url"],
         document_path=row["document_path"] if "document_path" in row.keys() else None,
         stop_requested=bool(row["stop_requested"]),
+        pause_requested=bool(row["pause_requested"]) if "pause_requested" in row.keys() else False,
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         steps=[

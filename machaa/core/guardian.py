@@ -25,6 +25,8 @@ ALLOWED_TOOLS = frozenset(
         "report.save_markdown",
         "llm.draft_document",
         "report.save_docx",
+        "image.find_licensed",
+        "content.write_social",
     }
 )
 
@@ -36,6 +38,8 @@ ALLOWED_ARGS = {
     "report.save_markdown": frozenset({"markdown"}),
     "llm.draft_document": frozenset({"instruction", "sources"}),
     "report.save_docx": frozenset({"title", "body"}),
+    "image.find_licensed": frozenset({"query"}),
+    "content.write_social": frozenset({"brand", "topic", "platform", "audience"}),
 }
 
 # Banking, payment, email, and assistant login sites. Matched on the host.
@@ -246,7 +250,26 @@ class Guardian:
             return self._review_draft(arguments["instruction"], arguments["sources"])
         if tool == "report.save_docx":
             return self._review_docx(arguments["title"], arguments["body"])
+        if tool == "image.find_licensed":
+            return self._review_image_query(arguments["query"])
+        if tool == "content.write_social":
+            return self._review_social(arguments)
         return Decision.allow()
+
+    def review_planned_call(self, tool: str, arguments: dict) -> Decision:
+        """Check a plan before anything runs.
+
+        Search and page addresses are checked as public web addresses.
+        Name lookup happens again when the action actually runs.
+        """
+
+        if tool not in ALLOWED_TOOLS or set(arguments) != ALLOWED_ARGS[tool]:
+            return Decision.deny("tool", MESSAGES["tool"])
+        if tool == "browser.search_google":
+            return self._review_search(arguments["query"], resolve=False)
+        if tool == "browser.visit_public_page":
+            return self.review_navigation(str(arguments["url"]), resolve=False)
+        return self.review_tool_call(tool, arguments)
 
     def review_navigation(self, url: str, *, resolve: bool) -> Decision:
         """Apply the public-web rules to one address."""
@@ -279,7 +302,7 @@ class Guardian:
                 return dns_decision
         return Decision.allow()
 
-    def _review_search(self, query: object) -> Decision:
+    def _review_search(self, query: object, *, resolve: bool = True) -> Decision:
         if not isinstance(query, str):
             return Decision.deny("tool", "Machaa blocked this search because the query is invalid.")
         cleaned = query.strip()
@@ -291,7 +314,37 @@ class Guardian:
             url = google_search_url(cleaned)
         except ValueError:
             return Decision.deny("tool", "Machaa blocked this search because the query is invalid.")
-        return self.review_navigation(url, resolve=True)
+        return self.review_navigation(url, resolve=resolve)
+
+    def _review_image_query(self, query: object) -> Decision:
+        if not isinstance(query, str):
+            return Decision.deny("tool", "Machaa blocked this image search because the query is invalid.")
+        cleaned = query.strip()
+        if not cleaned or len(cleaned) > 300 or any(ord(char) < 32 for char in cleaned):
+            return Decision.deny("tool", "Machaa blocked this image search because the query is invalid.")
+        if PAYMENT_INTENT.search(cleaned) or CARD_NUMBER.search(cleaned):
+            return Decision.deny("payment", MESSAGES["payment"])
+        if DESTRUCTIVE_INTENT.search(cleaned) or DOWNLOAD_INTENT.search(cleaned):
+            return Decision.deny("tool", MESSAGES["tool"])
+        return Decision.allow()
+
+    def _review_social(self, arguments: dict) -> Decision:
+        pieces: list[str] = []
+        limits = {"brand": 200, "topic": 300, "platform": 40, "audience": 200}
+        for name, limit in limits.items():
+            value = arguments.get(name)
+            if not isinstance(value, str):
+                return Decision.deny("tool", "Machaa blocked this social post because the details are invalid.")
+            cleaned = value.strip()
+            if not cleaned or len(cleaned) > limit:
+                return Decision.deny("tool", "Machaa blocked this social post because the details are invalid.")
+            pieces.append(cleaned)
+        text = "\n".join(pieces)
+        if PAYMENT_INTENT.search(text) or CARD_NUMBER.search(text):
+            return Decision.deny("payment", MESSAGES["payment"])
+        if DESTRUCTIVE_INTENT.search(text) or DOWNLOAD_INTENT.search(text):
+            return Decision.deny("tool", MESSAGES["tool"])
+        return Decision.allow()
 
     def _review_draft(self, instruction: object, sources: object) -> Decision:
         if not isinstance(instruction, str) or not isinstance(sources, str):

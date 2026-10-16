@@ -38,3 +38,26 @@ def test_open_google_without_a_query_is_not_a_search():
 
 def test_desktop_control_is_not_research():
     assert parse_research_request("Move the mouse and click the button") is None
+
+
+SOCIAL = (
+    "Machaa, prepare an Instagram content document for Vistaara Interiors "
+    "about affordable premium-looking 2BHK interiors. Research design ideas, "
+    "find a suitably licensed reference image, and create 3 captions with hashtags."
+)
+
+
+def test_acceptance_social_sentence_is_a_social_plan():
+    plan = parse_research_request(SOCIAL)
+    assert plan is not None
+    assert plan.kind == "social"
+    assert plan.platform == "Instagram"
+    assert plan.brand == "Vistaara Interiors"
+    assert plan.query == "affordable premium-looking 2BHK interiors"
+
+
+def test_word_document_stays_a_document():
+    plan = parse_research_request("Write a Word document about simple 2BHK interior design ideas")
+    assert plan is not None
+    assert plan.kind == "document"
+    assert plan.query == "simple 2BHK interior design ideas"

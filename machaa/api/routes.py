@@ -66,6 +66,24 @@ def stop_task(task_id: str, request: Request) -> dict:
     return record
 
 
+@router.post("/api/tasks/{task_id}/pause")
+def pause_task(task_id: str, request: Request) -> dict:
+    _task_or_404(task_id)
+    record = _service(request).pause(task_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    return record
+
+
+@router.post("/api/tasks/{task_id}/resume")
+def resume_task(task_id: str, request: Request) -> dict:
+    _task_or_404(task_id)
+    record = _service(request).resume(task_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    return record
+
+
 @router.get("/api/tasks/{task_id}/report")
 def get_report(task_id: str, request: Request) -> PlainTextResponse:
     _task_or_404(task_id)

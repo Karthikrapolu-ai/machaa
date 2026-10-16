@@ -21,9 +21,10 @@
       </header>
 
       <section class="banner" data-testid="gemini-setup">
-        <h2>A Word document needs a free Gemini key</h2>
+        <h2>A Word document or social post needs a free Gemini key</h2>
         <p>
-          Search still works with no key. To write a Word document, open the
+          Search still works with no key. To write a Word document or a social
+          post, open the
           Machaa folder and edit the file named <code>.env</code> (create it
           if it is missing). Add one line:
         </p>
@@ -40,10 +41,10 @@
         <section class="empty" id="empty">
           <h2>What should Machaa look up?</h2>
           <p>
-            Day 1 searches Google or opens one public website, then saves a
-            short report and a screenshot. A Google robot check is left alone
-            and another search source is used. Purchases, downloads, and your
-            personal Chrome stay off limits.
+            Machaa can search the web, open one public website, write a Word
+            document, or prepare a social post. A Google robot check is left
+            alone. Purchases, downloads, and your personal Chrome stay off
+            limits.
           </p>
         </section>
       </main>
@@ -59,6 +60,9 @@
           <button type="button" data-example="Write a Word document about simple 2BHK interior design ideas">
             Write a Word document
           </button>
+          <button type="button" data-example="Machaa, prepare an Instagram content document for Vistaara Interiors about affordable premium-looking 2BHK interiors. Research design ideas, find a suitably licensed reference image, and create 3 captions with hashtags.">
+            Instagram post
+          </button>
         </div>
         <div class="entry">
           <label class="sr-only" for="instruction">Ask Machaa</label>
@@ -70,7 +74,7 @@
           ></textarea>
           <button type="submit" data-testid="send">Send</button>
         </div>
-        <p class="hint">Runs on this computer. A Word document uses a free Gemini key from the .env file. Shift+Enter adds a line.</p>
+        <p class="hint">Runs on this computer. A Word document or social post uses the free Gemini key in the .env file. Shift+Enter adds a line.</p>
       </form>
     </div>
     <script src="/assets/app.js"></script>

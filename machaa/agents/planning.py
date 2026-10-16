@@ -1,4 +1,8 @@
-"""Turn one sentence into a search or a single public page. No model is called."""
+"""Turn one sentence into a search, a page visit, a Word brief, or a social post.
+
+Search and Word-document requests stay on fixed steps. A social post is the
+request the planner is allowed to turn into a short list of actions.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +20,31 @@ _SEARCH_GOOGLE = re.compile(r"\bsearch\s+google\s+(?:for\s+)?(.+)$", re.IGNORECA
 _URL = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _BARE_DOMAIN = re.compile(r"\b((?:[a-z0-9-]+\.)+[a-z]{2,}(?:/[^\s<>\"']*)?)", re.IGNORECASE)
 _VISIT_VERB = re.compile(r"\b(visit|open|go\s+to|browse)\b", re.IGNORECASE)
+_PLATFORM = re.compile(
+    r"\b(instagram|facebook|linkedin|tiktok|pinterest|twitter)\b",
+    re.IGNORECASE,
+)
+_SOCIAL_ASK = re.compile(
+    r"\b(content document|captions?|hashtags?|post concepts?|social posts?|social media)\b",
+    re.IGNORECASE,
+)
+_FOR_ABOUT = re.compile(
+    r"\bfor\s+(.+?)\s+about\s+(.+?)(?:\.|$)",
+    re.IGNORECASE,
+)
+_AUDIENCE = re.compile(
+    r"\b(?:audience|aimed at|for an audience of)\s+(.+?)(?:\.|$)",
+    re.IGNORECASE,
+)
+_PLATFORM_NAMES = {
+    "instagram": "Instagram",
+    "facebook": "Facebook",
+    "linkedin": "LinkedIn",
+    "tiktok": "TikTok",
+    "pinterest": "Pinterest",
+    "twitter": "Twitter",
+}
+DEFAULT_AUDIENCE = "people who might hire this brand"
 
 
 @dataclass(frozen=True)
@@ -23,14 +52,20 @@ class ResearchPlan:
     kind: str
     query: str | None = None
     url: str | None = None
+    brand: str | None = None
+    platform: str | None = None
+    audience: str | None = None
 
 
 def parse_research_request(instruction: str) -> ResearchPlan | None:
-    """Return a search, a page visit, or nothing when Day 1 cannot do it."""
+    """Return a search, a page visit, a Word brief, a social post, or nothing."""
 
     text = " ".join(instruction.strip().split())
     if not text:
         return None
+    social = _social_plan(text)
+    if social is not None:
+        return social
     document_query = _document_query(text)
     if document_query:
         return ResearchPlan(kind="document", query=document_query)
@@ -41,6 +76,48 @@ def parse_research_request(instruction: str) -> ResearchPlan | None:
     if url and (_VISIT_VERB.search(text) or text.lower().startswith("http")):
         return ResearchPlan(kind="visit", url=url)
     return None
+
+
+def _social_plan(text: str) -> ResearchPlan | None:
+    """A social post names a platform and asks for captions or a content document."""
+
+    if _SOCIAL_ASK.search(text) is None:
+        return None
+    platform_match = _PLATFORM.search(text)
+    if platform_match is None and re.search(r"\bsocial media\b", text, re.IGNORECASE) is None:
+        return None
+    platform = (
+        _PLATFORM_NAMES.get(platform_match.group(1).lower(), "Instagram")
+        if platform_match
+        else "Instagram"
+    )
+    brand = "the brand"
+    topic = ""
+    match = _FOR_ABOUT.search(text)
+    if match:
+        brand = match.group(1).strip().strip("\"'")
+        topic = match.group(2).strip().strip("\"'").rstrip(".")
+    else:
+        topic_match = _TOPIC.search(text)
+        if topic_match:
+            topic = topic_match.group(1).strip().strip("\"'").rstrip(".")
+    if not topic:
+        topic = text[:300]
+    audience_match = _AUDIENCE.search(text)
+    audience = (
+        audience_match.group(1).strip().strip("\"'").rstrip(".")
+        if audience_match
+        else DEFAULT_AUDIENCE
+    )
+    if not brand or not topic:
+        return None
+    return ResearchPlan(
+        kind="social",
+        query=topic[:300],
+        brand=brand[:200],
+        platform=platform[:40],
+        audience=audience[:200],
+    )
 
 
 def _document_query(text: str) -> str | None:

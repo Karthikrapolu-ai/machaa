@@ -10,6 +10,7 @@ from machaa.core.guardian import Guardian
 from machaa.core.orchestrator import DayOneOrchestrator
 from machaa.core.runner import Runner
 from machaa.core.tasks import TaskStore
+from machaa.llm.fixture import FixtureGemini
 from machaa.llm.gemini import KEY_HELP, GeminiClient
 from machaa.memory.store import LocalMemory
 
@@ -23,10 +24,27 @@ class TaskService:
         self.guardian = Guardian()
         self.memory = LocalMemory(self.store)
         self.orchestrator = DayOneOrchestrator()
-        self.gemini = gemini_client or GeminiClient(
-            settings.gemini_api_key,
-            settings.gemini_model,
+        self._model_ready = (
+            gemini_client is not None or bool(settings.gemini_api_key) or settings.gemini_fixture
         )
+        if gemini_client is not None:
+            self.gemini = gemini_client
+        elif settings.gemini_api_key:
+            self.gemini = GeminiClient(
+                settings.gemini_api_key,
+                settings.gemini_model,
+                max_tokens=settings.max_tokens,
+                max_retries=settings.max_retries,
+            )
+        elif settings.gemini_fixture:
+            self.gemini = FixtureGemini()
+        else:
+            self.gemini = GeminiClient(
+                "",
+                settings.gemini_model,
+                max_tokens=settings.max_tokens,
+                max_retries=settings.max_retries,
+            )
         self.research = ResearchAgent(
             settings,
             self.store,
@@ -49,7 +67,7 @@ class TaskService:
             )
             return self._public(record.id)
         plan = parse_research_request(record.instruction)
-        if plan is not None and plan.kind == "document" and not self.settings.gemini_api_key:
+        if plan is not None and plan.kind in {"document", "social"} and not self._model_ready:
             self.store.finish(
                 record.id,
                 status="needs_key",
@@ -72,6 +90,18 @@ class TaskService:
 
     def stop(self, task_id: str) -> dict | None:
         record = self.store.request_stop(task_id)
+        if record is None:
+            return None
+        return record.to_public()
+
+    def pause(self, task_id: str) -> dict | None:
+        record = self.store.request_pause(task_id)
+        if record is None:
+            return None
+        return record.to_public()
+
+    def resume(self, task_id: str) -> dict | None:
+        record = self.store.request_resume(task_id)
         if record is None:
             return None
         return record.to_public()

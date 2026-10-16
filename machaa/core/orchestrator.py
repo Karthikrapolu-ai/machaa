@@ -39,6 +39,7 @@ class DayOneOrchestrator:
         return Route(
             "research",
             False,
-            "Machaa can search the web, open one public website, or write a Word document. "
+            "Machaa can search the web, open one public website, write a Word document, "
+            "or prepare a social post. "
             "Try: Write a Word document about simple 2BHK interior design ideas.",
         )

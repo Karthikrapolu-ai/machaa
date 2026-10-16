@@ -27,6 +27,8 @@ services:
       MACHAA_GOOGLE_SEARCH_CX: ${MACHAA_GOOGLE_SEARCH_CX:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      MACHAA_MODEL_BUDGET: ${MACHAA_MODEL_BUDGET:-8000}
+      MACHAA_MAX_RETRIES: ${MACHAA_MAX_RETRIES:-1}
       HOME: /data/home
       XDG_CONFIG_HOME: /data/home/.config
       XDG_CACHE_HOME: /data/home/.cache

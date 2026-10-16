@@ -36,4 +36,4 @@ The API process runs one browser task at a time. A later queue can run work afte
 
 ## Planning
 
-Day 1 matches the sentence with fixed rules. Day 2 asks Gemini only to draft the words of a Word document from notes Machaa already collected. The model does not choose tools. Later planning can choose among the allowlisted tools. The Guardian still has to approve the tool call that planning picked.
+Search and Word documents still use a fixed list of steps. A social post asks Gemini (or a labelled stand-in when no key is set) for a short list of allowlisted actions. The Guardian checks the whole list before anything runs, and checks each action again at execution. The model cannot run a shell. Later planning can cover more of the same allowlist. The Guardian still has to approve every tool call.
