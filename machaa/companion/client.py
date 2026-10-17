@@ -9,8 +9,9 @@ import urllib.request
 from machaa.core.errors import CompanionRefused, CompanionUnavailable
 
 COMPANION_HELP = (
-    "The Windows Companion is not running. On Windows, double-click "
-    "start-machaa-windows.bat and leave that window open. Nothing was opened."
+    "The Windows Companion is not running. "
+    "Double-click START-MACHAA.bat and leave the Machaa Companion window open. "
+    "Nothing was opened."
 )
 
 

@@ -35,6 +35,11 @@ ALLOWED_TOOLS = frozenset(
         "desktop.save_text",
         "desktop.read_file",
         "desktop.focus_dashboard",
+        "desktop.save_docx",
+        "desktop.open_docx",
+        "desktop.switch_window",
+        "desktop.capture_screen",
+        "desktop.organize_file",
     }
 )
 
@@ -56,9 +61,17 @@ ALLOWED_ARGS = {
     "desktop.save_text": frozenset({"filename", "text"}),
     "desktop.read_file": frozenset({"filename"}),
     "desktop.focus_dashboard": frozenset(),
+    "desktop.save_docx": frozenset({"filename", "content"}),
+    "desktop.open_docx": frozenset({"filename"}),
+    "desktop.switch_window": frozenset({"target"}),
+    "desktop.capture_screen": frozenset(),
+    "desktop.organize_file": frozenset({"filename", "folder"}),
 }
 
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,60}\.(?:txt|md)$")
+_SAFE_DOCX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,60}\.docx$")
+_SAFE_FOLDER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _-]{0,40}$")
+_WINDOW_TARGET = frozenset({"notepad", "explorer", "document"})
 
 # Banking, payment, email, and assistant login sites. Matched on the host.
 BLOCKED_HOST_SUFFIXES = (
@@ -305,6 +318,14 @@ class Guardian:
             return self._review_save(arguments["filename"], arguments["text"])
         if tool == "desktop.read_file":
             return self._review_filename(arguments["filename"])
+        if tool == "desktop.save_docx":
+            return self._review_docx_file(arguments["filename"], arguments["content"])
+        if tool == "desktop.open_docx":
+            return self._review_docx_name(arguments["filename"])
+        if tool == "desktop.organize_file":
+            return self._review_organize(arguments["filename"], arguments["folder"])
+        if tool == "desktop.switch_window":
+            return self._review_window_target(arguments["target"])
         return Decision.allow()
 
     def review_planned_call(self, tool: str, arguments: dict) -> Decision:
@@ -405,6 +426,49 @@ class Guardian:
             return Decision.deny("tool", "Machaa blocked this typing because the text is invalid.")
         if not text.strip() or len(text) > 8000 or "\x00" in text:
             return Decision.deny("tool", "Machaa blocked this typing because the text is invalid.")
+        return Decision.allow()
+
+    def _review_docx_name(self, filename: object) -> Decision:
+        if not isinstance(filename, str) or _SAFE_DOCX.fullmatch(filename.strip()) is None:
+            return Decision.deny(
+                "tool",
+                "Machaa will only open or save a simple .docx name inside the Machaa Documents folder.",
+            )
+        return Decision.allow()
+
+    def _review_docx_file(self, filename: object, content: object) -> Decision:
+        name = self._review_docx_name(filename)
+        if not name.allowed:
+            return name
+        if not isinstance(content, str) or not content or len(content) > 8_000_000:
+            return Decision.deny("tool", "Machaa blocked this document because the file is invalid.")
+        import base64
+
+        try:
+            data = base64.b64decode(content, validate=True)
+        except (ValueError, TypeError):
+            return Decision.deny("tool", "Machaa blocked this document because the file is invalid.")
+        if len(data) < 4 or not data.startswith(b"PK\x03\x04"):
+            return Decision.deny("tool", "Machaa blocked this document because it is not a Word file.")
+        return Decision.allow()
+
+    def _review_organize(self, filename: object, folder: object) -> Decision:
+        name = self._review_docx_name(filename)
+        if not name.allowed:
+            return name
+        if not isinstance(folder, str) or _SAFE_FOLDER.fullmatch(folder.strip()) is None:
+            return Decision.deny(
+                "tool",
+                "Machaa will only move a file into a simple folder inside the Machaa Documents folder.",
+            )
+        return Decision.allow()
+
+    def _review_window_target(self, target: object) -> Decision:
+        if not isinstance(target, str) or target.strip().lower() not in _WINDOW_TARGET:
+            return Decision.deny(
+                "tool",
+                "Machaa will only switch to Notepad, File Explorer, or the document it opened.",
+            )
         return Decision.allow()
 
     def _review_filename(self, filename: object) -> Decision:

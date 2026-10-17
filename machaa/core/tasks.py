@@ -42,6 +42,11 @@ def _phase_for_tool(tool: str) -> str:
         "desktop.read_file": "Reading the file…",
         "desktop.focus_dashboard": "Opening Machaa…",
         "desktop.open_website": "Opening the page…",
+        "desktop.save_docx": "Saving the Word document…",
+        "desktop.open_docx": "Opening the Word document…",
+        "desktop.switch_window": "Switching windows…",
+        "desktop.capture_screen": "Taking a screenshot…",
+        "desktop.organize_file": "Organizing the file…",
     }.get(tool, "Working…")
 
 
@@ -70,6 +75,13 @@ def _elapsed_seconds(started_at: str) -> int:
     if started.tzinfo is None:
         started = started.replace(tzinfo=timezone.utc)
     return max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+
+
+def _saved_location(steps: list) -> str:
+    for step in reversed(steps):
+        if step.tool == "desktop.save_docx" and step.status == "completed" and step.detail:
+            return step.detail
+    return ""
 
 
 @dataclass
@@ -131,6 +143,7 @@ class TaskRecord:
             "phase": self.phase or _phase_for_status(self.status),
             "started_at": self.started_at,
             "elapsed_seconds": _elapsed_seconds(self.started_at),
+            "saved_location": _saved_location(self.steps),
             "has_screenshot": bool(self.screenshot_path),
             "has_report": bool(self.report_path),
             "has_document": bool(self.document_path),

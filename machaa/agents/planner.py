@@ -27,6 +27,7 @@ class Action:
     tool: str
     arguments: dict
     label: str
+    group: int = 0
 
 
 def default_social_actions(brand: str, topic: str, platform: str, audience: str) -> list[Action]:
@@ -76,7 +77,11 @@ def actions_from_model(raw: object, max_steps: int) -> list[Action]:
         if not isinstance(arguments, dict):
             raise PlanningError("The planner returned an action with no arguments.")
         label = " ".join(str(item.get("label") or tool).split())[:120] or tool
-        actions.append(Action(tool, dict(arguments), label))
+        try:
+            group = int(item.get("group", 0))
+        except (TypeError, ValueError):
+            group = 0
+        actions.append(Action(tool, dict(arguments), label, group))
     return actions
 
 

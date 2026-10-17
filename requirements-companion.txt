@@ -1,0 +1,2 @@
+# The Windows Companion uses Python's standard library.
+# START-MACHAA.bat installs this file once on the first run.

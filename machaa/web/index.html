@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MACHAA</title>
-    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="icon" href="/assets/favicon.svg?v=__ASSET_VERSION__" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/styles.css?v=__ASSET_VERSION__" />
   </head>
   <body>
     <div class="app">
@@ -15,6 +15,7 @@
           <div>
             <h1>MACHAA</h1>
             <p>Personal AI computer</p>
+            <p class="build" data-testid="build-label">__BUILD_LABEL__</p>
           </div>
         </div>
         <div class="header-side">
@@ -28,6 +29,13 @@
                 <input type="checkbox" data-testid="desktop-control" />
                 Desktop control
               </label>
+              <button type="button" class="stop" data-testid="start-companion" title="The Companion starts with Windows. The dashboard cannot launch it from Docker.">
+                Start Companion
+              </button>
+              <button type="button" class="stop" data-testid="test-microphone" title="Show whether this browser can hear you">
+                Test microphone
+              </button>
+              <p data-testid="mic-diagnostic" hidden></p>
               <label class="switch" title="Off unless you turn it on. Needs the optional voice program on this computer.">
                 <input type="checkbox" data-testid="wake-word" />
                 Listen for Open Machaa
@@ -47,6 +55,8 @@
           </details>
         </div>
       </header>
+
+      <p class="page-error" data-testid="page-error" role="alert" hidden></p>
 
       <section class="banner" data-testid="gemini-setup">
         <h2>A Word document or social post needs a free Gemini key</h2>
@@ -95,6 +105,9 @@
           <button type="button" data-example="Machaa, open Notepad.">
             Open Notepad
           </button>
+          <button type="button" data-example="research modern 2BHK interiors, prepare 3 creative Instagram posts for Vistaara Interiors, create a DOCX with captions and licensed pictures, save it in Documents/Machaa, and open it.">
+            Research, save, and open
+          </button>
         </div>
         <div class="entry">
           <label class="sr-only" for="instruction">Ask Machaa</label>
@@ -108,6 +121,7 @@
             <span class="record-dot" data-testid="recording-dot" aria-hidden="true"></span>
             <span data-testid="recording-timer">00:00</span>
             <button type="button" data-testid="recording-stop">Stop</button>
+            <button type="button" data-testid="recording-send">Send</button>
             <button type="button" data-testid="recording-cancel">Cancel</button>
           </div>
           <button type="button" class="mic-button" data-testid="talk" title="Click to record" aria-label="Click to record">
@@ -121,6 +135,6 @@
         <p class="hint">Runs on this computer. Click the microphone to speak, then edit the words before you send. Desktop control stays off until you turn it on in Settings. A Word document or social post uses the free Gemini key in the .env file.</p>
       </form>
     </div>
-    <script src="/assets/app.js"></script>
+    <script src="/assets/app.js?v=__ASSET_VERSION__"></script>
   </body>
 </html>

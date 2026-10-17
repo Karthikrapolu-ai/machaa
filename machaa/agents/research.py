@@ -14,6 +14,7 @@ from pathlib import Path
 from machaa.agents.desktop import NotepadMemory, desktop_handlers, execute_desktop
 from machaa.agents.planning import parse_research_request
 from machaa.agents.social import execute_social, social_handlers
+from machaa.agents.workflow import execute_workflow
 from machaa.browser.workspace import PlaywrightWorkspace
 from machaa.config import Settings
 from machaa.core.errors import StepLimitReached, TaskStopped, ToolDenied
@@ -100,6 +101,9 @@ class ResearchAgent:
         plan = parse_research_request(task.instruction)
         if plan is not None and plan.kind == "desktop":
             await execute_desktop(self, task_id, task, plan)
+            return
+        if plan is not None and plan.kind == "workflow":
+            await execute_workflow(self, task_id, task, plan)
             return
         if plan is not None and plan.kind == "social":
             await execute_social(self, task_id, task, plan)
@@ -463,6 +467,8 @@ def _step_arguments(tool: str, arguments: dict) -> dict:
         return {"title": arguments.get("title", ""), "body": "[saved to this task's Word document]"}
     if tool == "llm.draft_document":
         return {"instruction": arguments.get("instruction", ""), "sources": "[search notes]"}
+    if tool == "desktop.save_docx":
+        return {"filename": arguments.get("filename", ""), "content": "[document bytes]"}
     return arguments
 
 

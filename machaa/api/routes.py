@@ -12,6 +12,7 @@ from machaa.api.schemas import EnabledIn, InstructionIn, TrackIn, UpdateIn
 from machaa.core.errors import VoiceUnavailable
 from machaa.core.service import TaskService
 from machaa.voice.transcribe import MAX_AUDIO_BYTES, transcribe_audio, voice_ready
+from machaa.webinfo import build_label
 
 router = APIRouter()
 _TASK_ID = re.compile(r"^task_[0-9a-f]{32}$")
@@ -37,6 +38,7 @@ def health(request: Request) -> dict:
         "product": "MACHAA",
         "version": __version__,
         "day": 3,
+        "build": build_label(),
         "gemini_configured": bool(settings.gemini_api_key),
         "desktop_enabled": bool(service.desktop_enabled),
         "companion_configured": bool(service.companion.configured()),
@@ -104,6 +106,11 @@ def reject_task(task_id: str, request: Request) -> dict:
 @router.post("/api/desktop/permission")
 def desktop_permission(body: EnabledIn, request: Request) -> dict:
     return _service(request).set_desktop(body.enabled)
+
+
+@router.post("/api/companion/start")
+def start_companion(request: Request) -> dict:
+    return _service(request).companion_start_hint()
 
 
 @router.post("/api/voice/wake")
@@ -176,8 +183,24 @@ async def transcribe(request: Request) -> dict:
     data = await request.body()
     if len(data) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="That recording was too long. You can still type.")
+    mime = (request.headers.get("content-type") or "audio/webm").split(";", 1)[0].strip().lower()
+    if mime not in {
+        "audio/webm",
+        "audio/wav",
+        "audio/mp3",
+        "audio/mpeg",
+        "audio/ogg",
+        "audio/flac",
+        "audio/aac",
+        "audio/mp4",
+    }:
+        mime = "audio/webm"
     try:
-        text = transcribe_audio(data)
+        text = transcribe_audio(
+            data,
+            api_key=request.app.state.settings.gemini_api_key,
+            mime=mime,
+        )
     except VoiceUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     return {"text": text}

@@ -6,15 +6,27 @@ Day 1 is deliberately small. It can search Google and open one public website. I
 
 Search needs no API key and no cloud account. A Word document needs a free Gemini key, explained below. Machaa does not log in to ChatGPT, Gmail, or a bank.
 
+## Days 4–6 on Windows
+
+1. Unzip https://github.com/Karthikrapolu-ai/machaa/archive/refs/heads/cursor/machaa-day6.zip and copy your `.env` file into that folder.
+2. Double-click `START-MACHAA.bat`. The browser opens at **http://127.0.0.1:8787**. The header shows `v0.6.0`. Close any old Machaa tab.
+3. Turn **Desktop control** on in Settings. If a card says **Needs approval**, press **Approve**.
+4. Ask Machaa to research modern 2BHK interiors, prepare 3 Instagram posts for Vistaara Interiors, create a DOCX, save it in Documents/Machaa, and open it.
+5. Then you can ask it to open Notepad and write a summary of that document, or ask what it created in the last task.
+
+Click the microphone in the message box and speak. The words appear in the box. Stop keeps them. Send in that bar sends them. Cancel throws them away. **Stop** on a card stops the work and says which steps finished. Leave the Machaa Companion window open. To quit, double-click `STOP-MACHAA.bat`.
+
+These still need your PC: the microphone, Notepad, Word opening the file, File Explorer, and Docker Desktop.
+
 ## Windows, in three steps
 
 1. Unzip this download. If you already have a Machaa folder, copy your `.env` file into the new folder. Leave it as it is.
 2. Double-click `START-MACHAA.bat`.
 3. Your browser opens at **http://127.0.0.1:8787**.
 
-If the window says Python or Docker is missing, it tells you what to install. Then double-click `START-MACHAA.bat` again. A second double-click does not start a second copy. To stop, double-click `STOP-MACHAA.bat`.
+If the window says Python or Docker is missing, it tells you what to install. Then double-click `START-MACHAA.bat` again. That replaces the old dashboard instead of leaving it on port 8787. To stop, double-click `STOP-MACHAA.bat`.
 
-Click the microphone inside the message box to speak. A timer counts the seconds. Stop puts the words in the box so you can edit them before Send. Cancel throws the recording away. Mute, Desktop control, and Listen for Open Machaa are under Settings.
+Click the microphone inside the message box to speak. Chrome or Edge shows the words in the box while you talk. Stop leaves them there so you can edit. Send in the microphone bar sends them. Cancel throws them away. The timer stops in every case. Mute, Desktop control, Start Companion, and Listen for Open Machaa are under Settings.
 
 The card shows the real step Machaa is on, such as Searching… or Creating Word document…, and how many seconds it has been working. Stop stays on the card. There is no percentage.
 
@@ -83,12 +95,12 @@ Leave the key out and search still works. The Word request then says **Needs a k
 
 ## Windows desktop and voice
 
-On Windows, double-click `start-machaa-windows.bat` instead of `start.bat` when you want Notepad, Calculator, File Explorer, or the microphone. Leave both windows open. Your existing `.env` file stays where it is, including `GEMINI_API_KEY`.
+Double-click `START-MACHAA.bat`. It starts the Windows Companion in its own window, replaces any old dashboard still using port 8787, waits until the new page answers, then opens **http://127.0.0.1:8787**. The header shows the version, such as `v0.6.0`. Your existing `.env` file stays where it is, including `GEMINI_API_KEY`. The same file adds a Startup shortcut so the Companion can start when you sign in. Delete the shortcut named Machaa Companion if you do not want that. **Start Companion** on the page cannot launch it from Docker; the window and the Startup shortcut do that.
 
 The first time:
 
-1. If Windows says Python is missing, install it once from [python.org](https://www.python.org/downloads/) and tick **Add python.exe to PATH**. Then double-click `start-machaa-windows.bat` again. Search still works from `start.bat` if you skip this.
-2. When you hold **Talk**, Windows asks for the microphone. Choose **Allow**.
+1. If Python is missing, Machaa tries to install Python 3.12. If that does not finish, install Python and tick **Add python.exe to PATH**, then double-click `START-MACHAA.bat` again.
+2. When you click the microphone, Windows asks for the microphone. Choose **Allow**.
 3. Leave User Account Control on. Machaa will not click a Windows security box.
 4. In the page, turn **Desktop control** on before you ask Machaa to open Notepad. It starts off, and you can turn it off again at any time.
 
@@ -105,11 +117,11 @@ Machaa, stop.
 
 Saving or typing waits until you press **Approve**. Reject leaves the file alone. Stop cancels a desktop action that has not run yet. Files go only in your `Documents\Machaa` folder. Machaa types only into the Notepad window it opened.
 
-Hold **Talk** to speak. Machaa does not listen until you hold that button. **Mute** stops the spoken reply immediately. The words are recognised on your computer when the optional voice program is installed (`py -3 -m pip install faster-whisper`). Until then, the page says so and typing still works. Recordings are not saved.
+Click the microphone to speak. The words appear in the box. Stop keeps them, Send in that bar submits them, and Cancel throws them away. The timer stops in every case. If the browser speech engine returns nothing within a few seconds, or it reports a network or permission error, Stop and Send turn the recording into text with the Gemini key in `.env`. Settings has **Test microphone**, which shows the mic level and whether the speech engine is available. **Mute** stops the spoken reply immediately. An error is shown on the page if transcription fails. Recordings are not saved.
 
 **Listen for Open Machaa** stays off unless you turn it on. With the companion running, typing or saying Open Machaa brings the dashboard forward.
 
-If the card says the Windows Companion is not running, double-click `start-machaa-windows.bat` and leave the companion window open.
+If the card says the Windows Companion is not running, double-click `START-MACHAA.bat` and leave the Machaa Companion window open.
 
 ## Try a blocked request
 

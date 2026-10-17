@@ -142,42 +142,112 @@ def prepare_stop(root: Path, *, alive=pid_alive, killer=None) -> list[str]:
     return ["docker compose stop"]
 
 
+DASHBOARD_URL = "http://127.0.0.1:8787"
+
+
+def compose_up_command() -> list[str]:
+    """Always rebuild and replace the dashboard container."""
+
+    return ["docker", "compose", "up", "-d", "--build", "--force-recreate"]
+
+
+def remove_published_containers(port: int = 8787, runner=None) -> list[str]:
+    """Remove containers still bound to the dashboard port, including old folders."""
+
+    run = runner or subprocess.run
+    completed = run(
+        ["docker", "ps", "-aq", "--filter", f"publish={port}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    stdout = getattr(completed, "stdout", "") or ""
+    ids = [line.strip() for line in stdout.splitlines() if line.strip()]
+    for container_id in ids:
+        run(["docker", "rm", "-f", container_id], check=False)
+    return ids
+
+
+def rebuild_dashboard(folder: Path, runner=None) -> int:
+    """Stop the old dashboard and start this folder's code."""
+
+    run = runner or subprocess.run
+    env = _compose_env(folder)
+    run(["docker", "compose", "down", "--remove-orphans"], cwd=folder, env=env, check=False)
+    try:
+        remove_published_containers(runner=run)
+    except OSError:
+        return 1
+    completed = run(compose_up_command(), cwd=folder, env=env, check=False)
+    return int(getattr(completed, "returncode", 1))
+
+
+def wait_for_dashboard(attempts: int = 90, pause=None, opener=None) -> bool:
+    """True when http://127.0.0.1:8787/api/health answers."""
+
+    import time
+    import urllib.request
+
+    def default_pause() -> None:
+        time.sleep(1)
+
+    sleep = pause or default_pause
+    open_url = opener or urllib.request.urlopen
+    for _ in range(max(1, attempts)):
+        try:
+            with open_url(f"{DASHBOARD_URL}/api/health", timeout=1) as response:
+                if getattr(response, "status", 200) == 200:
+                    return True
+        except Exception:
+            pass
+        sleep()
+    return False
+
+
 def start(root: Path | None = None) -> int:
     folder = (root or Path.cwd()).resolve()
-    plan = prepare_start(folder)
-    print(plan.message)
-    if plan.already_running:
-        _open_browser()
-        return 0
-    docker = ensure_docker()
-    if docker == "not_installed":
-        print("Docker is not installed. Install Docker Desktop, open it, and double-click START-MACHAA.bat again.")
-        print("https://www.docker.com/products/docker-desktop/")
-        return 1
-    if docker != "running":
-        print("Docker is installed but not running. Open Docker Desktop, wait until it is ready, and double-click START-MACHAA.bat again.")
-        return 1
+    rebuilt = os.environ.get("MACHAA_DASHBOARD_REBUILT") == "1"
+    if not rebuilt:
+        docker = ensure_docker()
+        if docker == "not_installed":
+            print("Docker is not installed. Install Docker Desktop, open it, and double-click START-MACHAA.bat again.")
+            print("https://www.docker.com/products/docker-desktop/")
+            return 1
+        if docker != "running":
+            print("Docker is installed but not running. Open Docker Desktop, wait until it is ready, and double-click START-MACHAA.bat again.")
+            return 1
     _ensure_companion_token(folder)
     companion = prepare_companion(folder)
     print(companion.message)
     if companion.spawn:
         _spawn_companion(folder)
+        if not wait_for_companion():
+            print(
+                "The Windows Companion did not answer. "
+                "Leave the Machaa Companion window open and double-click START-MACHAA.bat again."
+            )
+            return 1
     try:
         note = _maybe_migrate(folder)
     except Exception:
         note = "Machaa could not finish the one-time folder setup. Your .env file and saved work were kept."
     if note:
         print(note)
+    if not rebuilt:
+        print("Replacing any old Machaa dashboard so this folder is the one you see.")
+        code = rebuild_dashboard(folder)
+        if code != 0:
+            print("Docker did not start the dashboard. Open Docker Desktop and double-click START-MACHAA.bat again.")
+            return code
+    print(f"Waiting for the dashboard at {DASHBOARD_URL}")
+    if not wait_for_dashboard():
+        print(f"The dashboard did not answer at {DASHBOARD_URL}. Double-click START-MACHAA.bat again.")
+        return 1
     mark_started(folder, os.getpid())
-    print("Leave this window open. Machaa will be at http://127.0.0.1:8787")
+    print(f"Machaa is at {DASHBOARD_URL}")
+    print("You can close this window. Leave the Machaa Companion window open.")
     _open_browser()
-    completed = subprocess.run(
-        ["docker", "compose", "up", "--build"],
-        cwd=folder,
-        env=_compose_env(folder),
-        check=False,
-    )
-    return int(completed.returncode)
+    return 0
 
 
 def stop(root: Path | None = None) -> int:
@@ -204,13 +274,42 @@ def _launch_docker() -> None:
         return
 
 
+def wait_for_companion(port: int = 8788, attempts: int = 30, pause=None, opener=None) -> bool:
+    """True when the companion health page answers on this computer."""
+
+    import time
+    import urllib.request
+
+    def default_pause() -> None:
+        time.sleep(0.2)
+
+    sleep = pause or default_pause
+    open_url = opener or urllib.request.urlopen
+    for _ in range(max(1, attempts)):
+        try:
+            with open_url(f"http://127.0.0.1:{port}/health", timeout=1) as response:
+                if getattr(response, "status", 200) == 200:
+                    return True
+        except Exception:
+            pass
+        sleep()
+    return False
+
+
 def _spawn_companion(root: Path) -> None:
     env = _compose_env(root)
     documents = Path.home() / "Documents" / "Machaa"
     documents.mkdir(parents=True, exist_ok=True)
     env["MACHAA_DOCUMENTS_DIR"] = str(documents)
     env["MACHAA_COMPANION_PORT"] = "8788"
-    proc = subprocess.Popen([sys.executable, "-m", "machaa.companion"], cwd=root, env=env)
+    env["MACHAA_COMPANION_DOCKER"] = "1"
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if sys.platform == "win32" else 0
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "machaa.companion"],
+        cwd=root,
+        env=env,
+        creationflags=flags,
+    )
     (root / "data" / "companion.pid").write_text(str(proc.pid), encoding="utf-8")
 
 
@@ -247,7 +346,7 @@ def _ensure_companion_token(root: Path) -> None:
 def _open_browser() -> None:
     import webbrowser
 
-    webbrowser.open("http://127.0.0.1:8787")
+    webbrowser.open(DASHBOARD_URL)
 
 
 def main(argv: list[str] | None = None) -> int:
