@@ -32,6 +32,7 @@ services:
       MACHAA_COMPANION_URL: ${MACHAA_COMPANION_URL:-http://host.docker.internal:8788}
       MACHAA_COMPANION_TOKEN: ${MACHAA_COMPANION_TOKEN:-}
       MACHAA_DOCUMENTS_DIR: ${MACHAA_DOCUMENTS_DIR:-}
+      MACHAA_COMMIT: ${MACHAA_COMMIT:-nogit}
       HOME: /data/home
       XDG_CONFIG_HOME: /data/home/.config
       XDG_CACHE_HOME: /data/home/.cache

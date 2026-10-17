@@ -6,19 +6,21 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from machaa import __version__
 from machaa.api.routes import router
 from machaa.config import Settings
 from machaa.core.service import TaskService
+from machaa.webinfo import asset_version, build_label
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "X-Frame-Options": "DENY",
+    "Cache-Control": "no-store",
     "Content-Security-Policy": (
         "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; "
         "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
@@ -44,8 +46,10 @@ def create_app(settings: Settings | None = None, browser_factory=None) -> FastAP
         return response
 
     @app.get("/")
-    def dashboard() -> FileResponse:
-        return FileResponse(WEB_DIR / "index.html")
+    def dashboard() -> HTMLResponse:
+        html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+        html = html.replace("__ASSET_VERSION__", asset_version()).replace("__BUILD_LABEL__", build_label())
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     app.include_router(router)
     app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")

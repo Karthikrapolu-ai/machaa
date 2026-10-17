@@ -12,6 +12,7 @@ from machaa.api.schemas import EnabledIn, InstructionIn, TrackIn, UpdateIn
 from machaa.core.errors import VoiceUnavailable
 from machaa.core.service import TaskService
 from machaa.voice.transcribe import MAX_AUDIO_BYTES, transcribe_audio, voice_ready
+from machaa.webinfo import build_label
 
 router = APIRouter()
 _TASK_ID = re.compile(r"^task_[0-9a-f]{32}$")
@@ -37,6 +38,7 @@ def health(request: Request) -> dict:
         "product": "MACHAA",
         "version": __version__,
         "day": 3,
+        "build": build_label(),
         "gemini_configured": bool(settings.gemini_api_key),
         "desktop_enabled": bool(service.desktop_enabled),
         "companion_configured": bool(service.companion.configured()),

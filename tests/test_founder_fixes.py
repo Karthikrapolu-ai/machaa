@@ -29,6 +29,15 @@ def test_speech_uses_the_browser_and_send_submits():
     assert "en-US" in script
     assert "interimResults" in script
     assert "getUserMedia" in script
+    assert "showPageError" in script
+    assert "3000" in script
+    assert "network" in script
+    assert "not-allowed" in script
+    assert "Speech engine:" in script
+    assert "Mic level:" in script
+    assert 'data-testid="build-label"' in page
+    assert 'data-testid="page-error"' in page
+    assert 'data-testid="test-microphone"' in page
     start = script.index("async function uploadRecording")
     end = script.index("desktopSwitch.addEventListener")
     assert "requestSubmit" not in script[start:end]
@@ -74,6 +83,10 @@ def test_companion_message_no_longer_names_the_old_file():
     assert "Startup" in bat
     assert "machaa.launcher start" in bat
     assert "docker compose up --build" not in bat
+    assert "docker compose down --remove-orphans" in bat
+    assert "docker rm -f" in bat
+    assert 'docker compose up -d --build --force-recreate' in bat
+    assert "http://127.0.0.1:8787" in bat
     assert "companion-login.bat" in Path("START-MACHAA.bat").read_text(encoding="utf-8")
 
 
@@ -125,3 +138,52 @@ def test_wait_for_companion_retries_then_sees_health():
 
     assert wait_for_companion(attempts=3, pause=lambda: None, opener=opener) is True
     assert calls["n"] == 2
+
+
+def test_dashboard_names_its_build_and_is_not_cached(settings):
+    client = TestClient(create_app(settings, ExplodingBrowser))
+    page = client.get("/")
+    assert "no-store" in page.headers["cache-control"]
+    assert "v0.6.0" in page.text
+    assert "__BUILD_LABEL__" not in page.text
+    assert "__ASSET_VERSION__" not in page.text
+    assert "/assets/app.js?v=" in page.text
+    assert 'data-testid="recording-timer">00:00' in page.text
+    script = client.get("/assets/app.js?v=check")
+    assert script.status_code == 200
+    assert "no-store" in script.headers["cache-control"]
+    health = client.get("/api/health").json()
+    assert health["day"] == 3
+    assert health["version"] == "0.6.0"
+    assert health["build"].startswith("v0.6.0")
+
+
+def test_start_rebuilds_when_an_old_dashboard_is_still_up(tmp_path: Path, monkeypatch):
+    import machaa.launcher as launcher
+
+    calls: list[str] = []
+    monkeypatch.delenv("MACHAA_DASHBOARD_REBUILT", raising=False)
+    monkeypatch.setattr(launcher, "ensure_docker", lambda: "running")
+    monkeypatch.setattr(launcher, "prepare_companion", lambda folder: launcher.StartPlan(True, False, "already"))
+    monkeypatch.setattr(launcher, "_maybe_migrate", lambda folder: "")
+    monkeypatch.setattr(launcher, "rebuild_dashboard", lambda folder: calls.append("rebuild") or 0)
+    monkeypatch.setattr(launcher, "wait_for_dashboard", lambda: True)
+    monkeypatch.setattr(launcher, "_open_browser", lambda: calls.append(launcher.DASHBOARD_URL))
+    monkeypatch.setattr(launcher, "port_open", lambda port, host="127.0.0.1": port == 8787)
+    assert launcher.start(tmp_path) == 0
+    assert calls == ["rebuild", "http://127.0.0.1:8787"]
+    assert launcher.compose_up_command() == ["docker", "compose", "up", "-d", "--build", "--force-recreate"]
+
+
+def test_start_does_not_rebuild_twice_after_the_bat(tmp_path: Path, monkeypatch):
+    import machaa.launcher as launcher
+
+    calls: list[str] = []
+    monkeypatch.setenv("MACHAA_DASHBOARD_REBUILT", "1")
+    monkeypatch.setattr(launcher, "prepare_companion", lambda folder: launcher.StartPlan(True, False, "already"))
+    monkeypatch.setattr(launcher, "_maybe_migrate", lambda folder: "")
+    monkeypatch.setattr(launcher, "rebuild_dashboard", lambda folder: calls.append("rebuild") or 0)
+    monkeypatch.setattr(launcher, "wait_for_dashboard", lambda: True)
+    monkeypatch.setattr(launcher, "_open_browser", lambda: calls.append("open"))
+    assert launcher.start(tmp_path) == 0
+    assert calls == ["open"]

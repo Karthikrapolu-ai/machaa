@@ -1,7 +1,38 @@
+function showPageError(message) {
+  const banner = document.querySelector("[data-testid='page-error']");
+  const text = message ? String(message) : "This page hit an error.";
+  if (!banner) {
+    return;
+  }
+  banner.hidden = false;
+  banner.textContent = text;
+}
+
+window.addEventListener("error", (event) => {
+  showPageError(event && event.message ? event.message : "This page hit an error.");
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event && event.reason;
+  showPageError(reason && reason.message ? reason.message : "This page hit an error.");
+});
+
+function listen(node, type, handler) {
+  if (!node) {
+    showPageError("A control on this page is missing. The version in the header is the build that is running.");
+    return;
+  }
+  try {
+    node.addEventListener(type, handler);
+  } catch (error) {
+    showPageError(error && error.message ? error.message : "A button could not be attached.");
+  }
+}
+
 const thread = document.querySelector("#thread");
 const form = document.querySelector("#composer");
 const input = document.querySelector("#instruction");
-const send = form.querySelector("button[type='submit']");
+const send = form ? form.querySelector("button[type='submit']") : null;
 const talk = document.querySelector("[data-testid='talk']");
 const mute = document.querySelector("[data-testid='mute']");
 const micStatus = document.querySelector("[data-testid='mic-status']");
@@ -51,6 +82,9 @@ let recognition = null;
 let listening = false;
 let finishing = false;
 let keepListening = false;
+let speechSawResult = false;
+let speechWait = 0;
+let recorderReady = Promise.resolve(false);
 let baseText = "";
 let finalText = "";
 let interimText = "";
@@ -76,10 +110,12 @@ function muted() {
 }
 
 function setMic(text) {
-  micStatus.textContent = text;
+  if (micStatus) {
+    micStatus.textContent = text;
+  }
 }
 
-mute.addEventListener("click", () => {
+listen(mute, "click", () => {
   const next = !muted();
   window.localStorage.setItem("machaa-muted", next ? "1" : "0");
   mute.setAttribute("aria-pressed", next ? "true" : "false");
@@ -89,36 +125,43 @@ mute.addEventListener("click", () => {
   }
   if (next) {
     setMic("Muted");
-    wakeSwitch.checked = false;
+    if (wakeSwitch) {
+      wakeSwitch.checked = false;
+    }
     window.clearTimeout(wakeTimer);
   } else {
     setMic("Microphone off");
   }
 });
 
-if (muted()) {
-  mute.setAttribute("aria-pressed", "true");
-  mute.textContent = "Muted";
-  setMic("Muted");
-}
+try {
+  if (mute && muted()) {
+    mute.setAttribute("aria-pressed", "true");
+    mute.textContent = "Muted";
+    setMic("Muted");
+  }
 
-talk.addEventListener("click", () => {
-  startListening();
-});
+  listen(talk, "click", () => {
+    startListening();
+  });
 
-recordingStop.addEventListener("click", () => {
-  finishListening("stop");
-});
+  listen(recordingStop, "click", () => {
+    hideRecording();
+    finishListening("stop");
+  });
 
-if (recordingSend) {
-  recordingSend.addEventListener("click", () => {
+  listen(recordingSend, "click", () => {
+    hideRecording();
     finishListening("send");
   });
-}
 
-recordingCancel.addEventListener("click", () => {
-  finishListening("cancel");
-});
+  listen(recordingCancel, "click", () => {
+    hideRecording();
+    finishListening("cancel");
+  });
+} catch (error) {
+  showPageError(error && error.message ? error.message : "This page could not start.");
+}
 
 function speechCtor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -140,8 +183,53 @@ function showLive() {
   input.value = joinSpeech(baseText, finalText + interimText);
 }
 
+function clearSpeechWait() {
+  window.clearTimeout(speechWait);
+  speechWait = 0;
+}
+
+function speechGaveUp(reason) {
+  if (speechSawResult) {
+    return;
+  }
+  clearSpeechWait();
+  keepListening = false;
+  const rec = recognition;
+  recognition = null;
+  if (rec) {
+    rec.onresult = null;
+    rec.onerror = null;
+    rec.onend = null;
+    try {
+      if (rec.abort) {
+        rec.abort();
+      } else {
+        rec.stop();
+      }
+    } catch (error) {
+      /* The engine had already stopped. */
+    }
+  }
+  if (listening) {
+    setMic(reason);
+  }
+}
+
+function armSpeechWatch() {
+  clearSpeechWait();
+  speechWait = window.setTimeout(() => {
+    if (!speechSawResult && listening) {
+      speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
+    }
+  }, 3000);
+}
+
 async function startListening() {
   if (listening || finishing) {
+    return;
+  }
+  if (!window.isSecureContext) {
+    setMic("Open http://127.0.0.1:8787 so the microphone can work. You can still type.");
     return;
   }
   if (muted()) {
@@ -152,6 +240,8 @@ async function startListening() {
   finalText = "";
   interimText = "";
   recordChunks = [];
+  speechSawResult = false;
+  clearSpeechWait();
   keepListening = true;
   listening = true;
   showRecording();
@@ -161,13 +251,17 @@ async function startListening() {
     speechStarted = startRecognition(Ctor);
   }
   let audioStarted = false;
+  recorderReady = startRecorder().catch(() => false);
   try {
-    audioStarted = await startRecorder();
+    audioStarted = await recorderReady;
   } catch (error) {
     audioStarted = false;
   }
   if (!listening) {
     return;
+  }
+  if (audioStarted) {
+    armSpeechWatch();
   }
   if (!speechStarted && !audioStarted) {
     listening = false;
@@ -185,30 +279,48 @@ function startRecognition(Ctor) {
     rec.continuous = true;
     rec.maxAlternatives = 1;
     rec.onresult = (event) => {
-      let interim = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const piece = event.results[index][0] ? event.results[index][0].transcript : "";
-        if (event.results[index].isFinal) {
-          finalText += piece;
-        } else {
-          interim += piece;
+      try {
+        speechSawResult = true;
+        clearSpeechWait();
+        let interim = "";
+        const results = event && event.results ? event.results : [];
+        const from = event && event.resultIndex ? event.resultIndex : 0;
+        for (let index = from; index < results.length; index += 1) {
+          const piece = results[index][0] ? results[index][0].transcript : "";
+          if (results[index].isFinal) {
+            finalText += piece;
+          } else {
+            interim += piece;
+          }
         }
+        interimText = interim;
+        showLive();
+      } catch (error) {
+        showPageError(error && error.message ? error.message : "Speech could not be shown.");
       }
-      interimText = interim;
-      showLive();
     };
     rec.onerror = (event) => {
-      if (event.error === "language-not-supported" && rec.lang !== "en-US") {
-        rec.lang = "en-US";
-        try {
-          rec.start();
-        } catch (error) {
-          keepListening = false;
+      try {
+        const code = event && event.error ? event.error : "";
+        if (code === "language-not-supported" && rec.lang !== "en-US") {
+          rec.lang = "en-US";
+          try {
+            rec.start();
+          } catch (error) {
+            speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
+          }
+          return;
         }
-        return;
-      }
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        keepListening = false;
+        if (
+          code === "network" ||
+          code === "not-allowed" ||
+          code === "service-not-allowed" ||
+          code === "audio-capture"
+        ) {
+          speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
+        }
+      } catch (error) {
+        speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
       }
     };
     rec.onend = () => {
@@ -239,19 +351,26 @@ async function startRecorder() {
     recordStream = null;
     return false;
   }
-  if (!listening) {
+  if (!listening && !finishing) {
     recordStream.getTracks().forEach((track) => track.stop());
     recordStream = null;
     return false;
   }
-  const mime = window.MediaRecorder && MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
-  recorder = mime ? new MediaRecorder(recordStream, { mimeType: mime }) : new MediaRecorder(recordStream);
-  recorder.addEventListener("dataavailable", (item) => {
-    if (item.data && item.data.size) {
-      recordChunks.push(item.data);
-    }
-  });
-  recorder.start();
+  try {
+    const mime = window.MediaRecorder && MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+    recorder = mime ? new MediaRecorder(recordStream, { mimeType: mime }) : new MediaRecorder(recordStream);
+    recorder.addEventListener("dataavailable", (item) => {
+      if (item.data && item.data.size) {
+        recordChunks.push(item.data);
+      }
+    });
+    recorder.start(1000);
+  } catch (error) {
+    recordStream.getTracks().forEach((track) => track.stop());
+    recordStream = null;
+    recorder = null;
+    return false;
+  }
   return true;
 }
 
@@ -272,9 +391,9 @@ function stopRecognition() {
 
 function stopRecorder() {
   return new Promise((resolve) => {
-    const chunks = recordChunks.slice();
     const mime = recorder && recorder.mimeType ? recorder.mimeType : "audio/webm";
     const finish = () => {
+      const chunks = recordChunks.slice();
       if (recordStream) {
         recordStream.getTracks().forEach((track) => track.stop());
         recordStream = null;
@@ -298,11 +417,17 @@ function stopRecorder() {
 }
 
 async function finishListening(mode) {
+  clearSpeechWait();
+  hideRecording();
   if (!listening || finishing) {
-    hideRecording();
     return;
   }
   finishing = true;
+  try {
+    await recorderReady;
+  } catch (error) {
+    /* The microphone was not ready. Stop still ends the timer. */
+  }
   listening = false;
   const base = baseText;
   const spoken = (finalText + interimText).trim();
@@ -346,22 +471,37 @@ async function finishListening(mode) {
 
 function showRecording() {
   recordSeconds = 0;
-  recordingTimer.textContent = "00:00";
-  recordingBar.hidden = false;
-  talk.dataset.recording = "true";
+  if (recordingTimer) {
+    recordingTimer.textContent = "00:00";
+  }
+  if (recordingBar) {
+    recordingBar.hidden = false;
+  }
+  if (talk) {
+    talk.dataset.recording = "true";
+  }
   setMic("Recording");
   window.clearInterval(recordTick);
   recordTick = window.setInterval(() => {
     recordSeconds += 1;
-    recordingTimer.textContent = formatClock(recordSeconds);
+    if (recordingTimer) {
+      recordingTimer.textContent = formatClock(recordSeconds);
+    }
   }, 1000);
 }
 
 function hideRecording() {
-  recordingBar.hidden = true;
-  talk.dataset.recording = "false";
+  clearSpeechWait();
+  if (recordingBar) {
+    recordingBar.hidden = true;
+  }
+  if (talk) {
+    talk.dataset.recording = "false";
+  }
   window.clearInterval(recordTick);
-  recordingTimer.textContent = "00:00";
+  if (recordingTimer) {
+    recordingTimer.textContent = "00:00";
+  }
 }
 
 async function uploadRecording(chunks) {
@@ -402,6 +542,7 @@ async function uploadRecording(chunks) {
   return text;
 }
 
+if (desktopSwitch) {
 desktopSwitch.addEventListener("change", async () => {
   const response = await fetch("/api/desktop/permission", {
     method: "POST",
@@ -412,8 +553,9 @@ desktopSwitch.addEventListener("change", async () => {
     desktopSwitch.checked = false;
   }
 });
+}
 
-wakeSwitch.addEventListener("change", async () => {
+listen(wakeSwitch, "change", async () => {
   if (muted()) {
     wakeSwitch.checked = false;
     setMic("Muted");
@@ -491,17 +633,21 @@ async function wakeLoop() {
   }
 }
 
-if (startCompanion) {
-  startCompanion.addEventListener("click", async () => {
-    const response = await fetch("/api/companion/start", { method: "POST" });
-    const body = await response.json();
-    const detail = body.detail || "Machaa cannot start the Companion from inside Docker.";
+listen(startCompanion, "click", async () => {
+  const response = await fetch("/api/companion/start", { method: "POST" });
+  const body = await response.json();
+  const detail = body.detail || "Machaa cannot start the Companion from inside Docker.";
+  if (runtimeStatus) {
     runtimeStatus.textContent = detail;
-    setMic(detail);
-  });
-}
+  }
+  setMic(detail);
+});
 
-form.addEventListener("submit", async (event) => {
+listen(document.querySelector("[data-testid='test-microphone']"), "click", () => {
+  testMicrophone();
+});
+
+listen(form, "submit", async (event) => {
   event.preventDefault();
   if (listening) {
     await finishListening("send");
@@ -531,7 +677,7 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-input.addEventListener("keydown", (event) => {
+listen(input, "keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     form.requestSubmit();
@@ -545,7 +691,7 @@ document.querySelectorAll("[data-example]").forEach((button) => {
   });
 });
 
-thread.addEventListener("click", async (event) => {
+listen(thread, "click", async (event) => {
   const stop = event.target.closest("[data-testid='stop']");
   const pause = event.target.closest("[data-testid='pause']");
   const resume = event.target.closest("[data-testid='resume']");
@@ -893,14 +1039,14 @@ function safeUrl(value) {
   return "";
 }
 
-checkUpdates.addEventListener("click", async () => {
+listen(checkUpdates, "click", async () => {
   await saveTrackBranch();
   await loadUpdateStatus();
 });
 
-trackBranch.addEventListener("change", saveTrackBranch);
+listen(trackBranch, "change", saveTrackBranch);
 
-applyUpdate.addEventListener("click", async () => {
+listen(applyUpdate, "click", async () => {
   applyUpdate.disabled = true;
   try {
     const response = await fetch("/api/updates/apply", {
@@ -955,6 +1101,9 @@ async function loadUpdateStatus() {
 }
 
 function showRuntime(health) {
+  if (!runtimeStatus) {
+    return;
+  }
   const parts = [];
   if (health.reconnect) {
     parts.push(health.reconnect);
@@ -980,11 +1129,15 @@ async function loadSetup() {
       return;
     }
     const health = await response.json();
-    if (health.gemini_configured) {
+    if (health.gemini_configured && banner) {
       banner.hidden = true;
     }
-    desktopSwitch.checked = Boolean(health.desktop_enabled);
-    wakeSwitch.checked = false;
+    if (desktopSwitch) {
+      desktopSwitch.checked = Boolean(health.desktop_enabled);
+    }
+    if (wakeSwitch) {
+      wakeSwitch.checked = false;
+    }
     showRuntime(health);
     if (health.wake_enabled) {
       await fetch("/api/voice/wake", {
@@ -995,10 +1148,86 @@ async function loadSetup() {
     }
     await loadUpdateStatus();
   } catch (error) {
-    banner.hidden = false;
-    runtimeStatus.textContent = "Machaa is not connected. Double-click START-MACHAA.bat and leave that window open.";
+    if (banner) {
+      banner.hidden = false;
+    }
+    if (runtimeStatus) {
+      runtimeStatus.textContent = "Machaa is not connected. Double-click START-MACHAA.bat and leave that window open.";
+    }
   }
 }
 
-loadSetup();
-refresh();
+async function testMicrophone() {
+  const diagnostic = document.querySelector("[data-testid='mic-diagnostic']");
+  const lines = [];
+  const label = document.querySelector("[data-testid='build-label']");
+  if (label && label.textContent) {
+    lines.push("Build " + label.textContent.trim() + ".");
+  }
+  lines.push(
+    window.isSecureContext
+      ? "This page is a secure context, so the microphone is allowed to run."
+      : "This page is not a secure context. Open http://127.0.0.1:8787.",
+  );
+  lines.push(
+    speechCtor()
+      ? "Speech engine: this browser can type words as you talk."
+      : "Speech engine: this browser has no speech engine. A recording will be sent for transcription.",
+  );
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    lines.push("Mic level: blocked. In Windows, choose Allow when the browser asks.");
+  } else {
+    let stream = null;
+    let audioContext = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContext = new AudioContext();
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.fftSize);
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let index = 0; index < data.length; index += 1) {
+        const centered = (data[index] - 128) / 128;
+        sum += centered * centered;
+      }
+      const level = Math.sqrt(sum / data.length);
+      lines.push(
+        level > 0.02
+          ? "Mic level: hearing sound."
+          : "Mic level: quiet. Speak, or check that Windows allows this browser to use the microphone.",
+      );
+    } catch (error) {
+      lines.push("Mic level: blocked. In Windows, choose Allow when the browser asks.");
+    } finally {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      if (audioContext) {
+        try {
+          await audioContext.close();
+        } catch (error) {
+          /* The audio context was already closed. */
+        }
+      }
+    }
+  }
+  if (diagnostic) {
+    diagnostic.hidden = false;
+    diagnostic.textContent = lines.join(" ");
+  }
+  setMic(lines[lines.length - 1]);
+}
+
+try {
+  loadSetup();
+  refresh();
+} catch (error) {
+  showPageError(error && error.message ? error.message : "This page could not start.");
+}

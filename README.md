@@ -9,7 +9,7 @@ Search needs no API key and no cloud account. A Word document needs a free Gemin
 ## Days 4–6 on Windows
 
 1. Unzip https://github.com/Karthikrapolu-ai/machaa/archive/refs/heads/cursor/machaa-day6.zip and copy your `.env` file into that folder.
-2. Double-click `START-MACHAA.bat`. The browser opens at **http://127.0.0.1:8787**.
+2. Double-click `START-MACHAA.bat`. The browser opens at **http://127.0.0.1:8787**. The header shows `v0.6.0`. Close any old Machaa tab.
 3. Turn **Desktop control** on in Settings. If a card says **Needs approval**, press **Approve**.
 4. Ask Machaa to research modern 2BHK interiors, prepare 3 Instagram posts for Vistaara Interiors, create a DOCX, save it in Documents/Machaa, and open it.
 5. Then you can ask it to open Notepad and write a summary of that document, or ask what it created in the last task.
@@ -24,7 +24,7 @@ These still need your PC: the microphone, Notepad, Word opening the file, File E
 2. Double-click `START-MACHAA.bat`.
 3. Your browser opens at **http://127.0.0.1:8787**.
 
-If the window says Python or Docker is missing, it tells you what to install. Then double-click `START-MACHAA.bat` again. A second double-click does not start a second copy. To stop, double-click `STOP-MACHAA.bat`.
+If the window says Python or Docker is missing, it tells you what to install. Then double-click `START-MACHAA.bat` again. That replaces the old dashboard instead of leaving it on port 8787. To stop, double-click `STOP-MACHAA.bat`.
 
 Click the microphone inside the message box to speak. Chrome or Edge shows the words in the box while you talk. Stop leaves them there so you can edit. Send in the microphone bar sends them. Cancel throws them away. The timer stops in every case. Mute, Desktop control, Start Companion, and Listen for Open Machaa are under Settings.
 
@@ -95,7 +95,7 @@ Leave the key out and search still works. The Word request then says **Needs a k
 
 ## Windows desktop and voice
 
-Double-click `START-MACHAA.bat`. It starts the Windows Companion in its own window, waits until that window answers, then opens the dashboard. Your existing `.env` file stays where it is, including `GEMINI_API_KEY`. The same file adds a Startup shortcut so the Companion can start when you sign in. Delete the shortcut named Machaa Companion if you do not want that. **Start Companion** on the page cannot launch it from Docker; the window and the Startup shortcut do that.
+Double-click `START-MACHAA.bat`. It starts the Windows Companion in its own window, replaces any old dashboard still using port 8787, waits until the new page answers, then opens **http://127.0.0.1:8787**. The header shows the version, such as `v0.6.0`. Your existing `.env` file stays where it is, including `GEMINI_API_KEY`. The same file adds a Startup shortcut so the Companion can start when you sign in. Delete the shortcut named Machaa Companion if you do not want that. **Start Companion** on the page cannot launch it from Docker; the window and the Startup shortcut do that.
 
 The first time:
 
@@ -117,7 +117,7 @@ Machaa, stop.
 
 Saving or typing waits until you press **Approve**. Reject leaves the file alone. Stop cancels a desktop action that has not run yet. Files go only in your `Documents\Machaa` folder. Machaa types only into the Notepad window it opened.
 
-Click the microphone to speak. The words appear in the box. Stop keeps them, Send in that bar submits them, and Cancel throws them away. **Mute** stops the spoken reply immediately. If the browser cannot type the words, Machaa sends that short recording to Gemini with the key in `.env` and shows an error if that fails. Recordings are not saved.
+Click the microphone to speak. The words appear in the box. Stop keeps them, Send in that bar submits them, and Cancel throws them away. The timer stops in every case. If the browser speech engine returns nothing within a few seconds, or it reports a network or permission error, Stop and Send turn the recording into text with the Gemini key in `.env`. Settings has **Test microphone**, which shows the mic level and whether the speech engine is available. **Mute** stops the spoken reply immediately. An error is shown on the page if transcription fails. Recordings are not saved.
 
 **Listen for Open Machaa** stays off unless you turn it on. With the companion running, typing or saying Open Machaa brings the dashboard forward.
 

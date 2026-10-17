@@ -69,6 +69,30 @@ echo Machaa will also start the Companion when you sign in to Windows, so Notepa
 echo A shortcut named Machaa Companion is in your Startup folder. Delete that shortcut if you do not want this.
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$shell=New-Object -ComObject WScript.Shell; $link=$shell.CreateShortcut([Environment]::GetFolderPath('Startup')+'\Machaa Companion.lnk'); $link.TargetPath='%CD%\companion-login.bat'; $link.WorkingDirectory='%CD%'; $link.WindowStyle=7; $link.Save()"
 echo.
+echo Replacing any old Machaa dashboard so this download is the one you see.
+where docker >nul 2>&1
+if errorlevel 1 (
+  echo Docker is not installed. Install Docker Desktop, open it, and double-click START-MACHAA.bat again.
+  echo https://www.docker.com/products/docker-desktop/
+  pause
+  exit /b 1
+)
+docker compose down --remove-orphans
+for /f "tokens=*" %%C in ('docker ps -aq --filter "publish=8787"') do docker rm -f %%C
+set "MACHAA_COMMIT=nogit"
+where git >nul 2>&1
+if not errorlevel 1 (
+  for /f "delims=" %%G in ('git rev-parse --short HEAD 2^>nul') do set "MACHAA_COMMIT=%%G"
+)
+docker compose up -d --build --force-recreate
+if errorlevel 1 (
+  echo Docker did not start the dashboard. Open Docker Desktop and double-click START-MACHAA.bat again.
+  pause
+  exit /b 1
+)
+set MACHAA_DASHBOARD_REBUILT=1
+echo The dashboard opens at http://127.0.0.1:8787
+echo The header shows the version. Close any old Machaa tab before you use the new one.
 "%PYBIN%" -m machaa.launcher start
 if errorlevel 1 pause
 exit /b %ERRORLEVEL%
