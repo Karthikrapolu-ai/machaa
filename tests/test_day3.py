@@ -389,7 +389,7 @@ async def test_open_machaa_does_not_require_the_desktop_switch(settings):
 def test_voice_route_does_not_store_audio(settings, monkeypatch):
     monkeypatch.setattr(
         "machaa.api.routes.transcribe_audio",
-        lambda data: "Machaa, open Notepad.",
+        lambda data, **_kwargs: "Machaa, open Notepad.",
     )
     client = TestClient(create_app(settings, ExplodingBrowser))
     response = client.post("/api/voice/transcribe", content=b"fake-audio")

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import secrets
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,7 +30,9 @@ class CompanionServer:
         self._thread: threading.Thread | None = None
 
     def bind(self, host: str = "127.0.0.1") -> None:
-        if host not in {"127.0.0.1"}:
+        if host == "0.0.0.0" or host not in {"127.0.0.1", ""}:
+            raise RuntimeError("The companion only listens on this computer (127.0.0.1).")
+        if host == "" and os.environ.get("MACHAA_COMPANION_DOCKER") != "1":
             raise RuntimeError("The companion only listens on this computer (127.0.0.1).")
         handler = _handler_factory(self)
         self._httpd = ThreadingHTTPServer((host, self.port), handler)
@@ -59,7 +63,17 @@ def _handler_factory(server: CompanionServer):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
+        def do_GET(self) -> None:  # noqa: N802
+            if self._reject_remote():
+                return
+            if self.path not in {"/health", "/v1/health"}:
+                self._send(404, {"ok": False, "error": "Not found."})
+                return
+            self._send(200, {"ok": True, "status": "ok"})
+
         def do_POST(self) -> None:  # noqa: N802
+            if self._reject_remote():
+                return
             if self.path not in {"/v1/act", "/v1/permission"}:
                 self._send(404, {"ok": False, "error": "Not found."})
                 return
@@ -99,6 +113,13 @@ def _handler_factory(server: CompanionServer):
         def log_message(self, fmt: str, *args) -> None:
             return
 
+        def _reject_remote(self) -> bool:
+            host = self.client_address[0] if self.client_address else ""
+            if peer_allowed(host):
+                return False
+            self._send(403, {"ok": False, "error": "The companion only answers on this computer."})
+            return True
+
         def _send(self, status: int, body: dict) -> None:
             encoded = json.dumps(body).encode("utf-8")
             self.send_response(status)
@@ -109,6 +130,21 @@ def _handler_factory(server: CompanionServer):
             self.wfile.write(encoded)
 
     return Handler
+
+
+def peer_allowed(address: str) -> bool:
+    """Loopback, plus the private addresses Docker Desktop uses on Windows."""
+
+    raw = (address or "").split("%", 1)[0]
+    try:
+        ip = ipaddress.ip_address(raw)
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    if ip.is_loopback:
+        return True
+    return bool(ip.is_private and not ip.is_link_local)
 
 
 def _authorized(header: str, token: str) -> bool:
@@ -127,13 +163,34 @@ def main() -> None:
         if token_file.is_file():
             token = token_file.read_text(encoding="utf-8").strip()
     if not token:
-        print("The companion needs a token. Double-click start-machaa-windows.bat.")
+        print("The companion needs a token. Double-click START-MACHAA.bat.")
         raise SystemExit(1)
     documents = Path(
         os.environ.get("MACHAA_DOCUMENTS_DIR", str(Path.home() / "Documents" / "Machaa"))
     ).expanduser()
     port = int(os.environ.get("MACHAA_COMPANION_PORT", "8788"))
-    print("Machaa companion is listening only on this computer.")
+    _write_pid()
+    host = "127.0.0.1"
+    if sys.platform == "win32" and os.environ.get("MACHAA_COMPANION_DOCKER") == "1":
+        # Docker Desktop cannot open a program that listens only on 127.0.0.1.
+        # Public internet addresses are still refused. The token is still required.
+        host = ""
+        print("If Windows asks to allow Python on private networks, choose Allow.")
+        print("Machaa will not click that box for you.")
+    print("Machaa companion is listening on this computer.")
     print("Leave this window open. It is not reachable from the internet.")
     print("Machaa will not click a Windows security prompt.")
-    CompanionServer(token, documents, port).serve_forever("127.0.0.1")
+    try:
+        CompanionServer(token, documents, port).serve_forever(host)
+    except OSError:
+        print("The Windows Companion is already running. Leave that window open.")
+        raise SystemExit(0) from None
+
+
+def _write_pid() -> None:
+    path = Path(os.environ.get("MACHAA_DATA_DIR", "data")) / "companion.pid"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError:
+        return

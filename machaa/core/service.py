@@ -180,6 +180,27 @@ class TaskService:
                 detail = str(exc)
         return {"enabled": self.desktop_enabled, "detail": detail}
 
+    def companion_start_hint(self) -> dict:
+        """The dashboard runs in Docker and cannot launch a Windows program."""
+
+        from machaa.launcher import port_open
+
+        if self.companion.configured():
+            port = _companion_port(self.companion.url)
+            if port_open(port):
+                return {
+                    "started": True,
+                    "detail": "The Windows Companion is already running.",
+                }
+        return {
+            "started": False,
+            "detail": (
+                "Machaa cannot start the Companion from inside Docker. "
+                "It starts when you sign in to Windows, and when you double-click START-MACHAA.bat. "
+                "Leave the Machaa Companion window open."
+            ),
+        }
+
     def set_wake(self, enabled: bool) -> dict:
         from machaa.voice.transcribe import voice_ready
 
@@ -232,7 +253,7 @@ class TaskService:
             if companion_status == "not_running":
                 notes.append(
                     "The Windows Companion is not running. "
-                    "Double-click START-MACHAA.bat and leave that window open."
+                    "Double-click START-MACHAA.bat and leave the Machaa Companion window open."
                 )
         return {
             "docker": self._docker_state,

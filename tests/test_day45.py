@@ -100,7 +100,7 @@ def test_microphone_stays_in_the_box_and_does_not_send(settings):
 
 
 def test_transcription_is_returned_for_the_box(settings, monkeypatch):
-    monkeypatch.setattr("machaa.api.routes.transcribe_audio", lambda data: "Open Notepad, then wait.")
+    monkeypatch.setattr("machaa.api.routes.transcribe_audio", lambda data, **_kwargs: "Open Notepad, then wait.")
     client = TestClient(create_app(settings, ExplodingBrowser))
     response = client.post("/api/voice/transcribe", content=b"not-saved")
     assert response.status_code == 200

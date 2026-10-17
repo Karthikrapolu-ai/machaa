@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import urllib.error
@@ -119,6 +120,22 @@ class GeminiClient:
         social["model"] = model
         return social
 
+    def transcribe_speech(self, audio: bytes, mime: str) -> str:
+        """Turn one short recording into words. The bytes are not stored."""
+
+        if not self.api_key:
+            raise MissingKeyError(KEY_HELP)
+        prompt = (
+            "Transcribe the spoken words in this audio. "
+            "Reply with only those words. If nobody spoke, reply with an empty string."
+        )
+        parts = [
+            {"text": prompt},
+            {"inlineData": {"mimeType": mime or "audio/webm", "data": base64.b64encode(audio).decode("ascii")}},
+        ]
+        text, _model = self._complete_parts(parts, max_tokens=512)
+        return " ".join(text.split())
+
     def _complete(self, prompt: str) -> tuple[str, str]:
         if not self.api_key:
             raise MissingKeyError(KEY_HELP)
@@ -144,13 +161,46 @@ class GeminiClient:
         details = " ".join(not_found) or "The model was not found."
         raise DraftError(f"Gemini did not return a document (HTTP 404). {details}")
 
+    def _complete_parts(self, parts: list, max_tokens: int = 512) -> tuple[str, str]:
+        if not self.api_key:
+            raise MissingKeyError(KEY_HELP)
+        if not _MODEL.fullmatch(self.model):
+            raise DraftError("Machaa could not use the configured Gemini model name.")
+        not_found: list[str] = []
+        tried: set[str] = set()
+        queue = [self.model]
+        while queue:
+            model = queue.pop(0)
+            if model in tried or not _MODEL.fullmatch(model):
+                continue
+            tried.add(model)
+            try:
+                body = self._request_parts(model, parts, max_tokens)
+            except _ModelNotFound as missing:
+                not_found.append(f"{model}: {missing.detail}")
+                for name in FALLBACK_MODELS:
+                    if name not in tried and name not in queue:
+                        queue.append(name)
+                continue
+            return _answer_text(body), model
+        details = " ".join(not_found) or "The model was not found."
+        raise DraftError(f"Gemini did not return a document (HTTP 404). {details}")
+
     def _request(self, model: str, prompt: str) -> dict:
+        return self._request_parts(
+            model,
+            [{"text": prompt}],
+            2048,
+            mime="application/json",
+        )
+
+    def _request_parts(self, model: str, parts: list, max_tokens: int, mime: str = "") -> dict:
+        config: dict[str, object] = {"maxOutputTokens": max_tokens}
+        if mime:
+            config["responseMimeType"] = mime
         payload = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens": 2048,
-                "responseMimeType": "application/json",
-            },
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": config,
         }
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -195,7 +245,12 @@ class GeminiClient:
             except json.JSONDecodeError as exc:
                 raise DraftError("Gemini did not return a document.") from exc
             answer = _answer_text(body)
-            self._charge(body, prompt, answer)
+            budget = " ".join(
+                str(part.get("text") or "")
+                for part in parts
+                if isinstance(part, dict)
+            )
+            self._charge(body, budget or "audio", answer)
             return body
         raise QuotaError(f"Gemini is out of quota. {quota_detail}".strip())
 

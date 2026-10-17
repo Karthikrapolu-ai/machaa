@@ -47,7 +47,15 @@ let recordStream = null;
 let recordChunks = [];
 let recordSeconds = 0;
 let recordTick = 0;
-let discardRecording = false;
+let recognition = null;
+let listening = false;
+let finishing = false;
+let keepListening = false;
+let baseText = "";
+let finalText = "";
+let interimText = "";
+const recordingSend = document.querySelector("[data-testid='recording-send']");
+const startCompanion = document.querySelector("[data-testid='start-companion']");
 let wakeTimer = 0;
 let voicePrimed = false;
 let liveSource = null;
@@ -94,56 +102,247 @@ if (muted()) {
   setMic("Muted");
 }
 
-talk.addEventListener("click", async () => {
-  if (recorder && recorder.state !== "inactive") {
+talk.addEventListener("click", () => {
+  startListening();
+});
+
+recordingStop.addEventListener("click", () => {
+  finishListening("stop");
+});
+
+if (recordingSend) {
+  recordingSend.addEventListener("click", () => {
+    finishListening("send");
+  });
+}
+
+recordingCancel.addEventListener("click", () => {
+  finishListening("cancel");
+});
+
+function speechCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function joinSpeech(base, spoken) {
+  const left = (base || "").trim();
+  const right = (spoken || "").trim();
+  if (!right) {
+    return left;
+  }
+  if (!left) {
+    return right;
+  }
+  return left + " " + right;
+}
+
+function showLive() {
+  input.value = joinSpeech(baseText, finalText + interimText);
+}
+
+async function startListening() {
+  if (listening || finishing) {
     return;
   }
   if (muted()) {
     setMic("Muted");
     return;
   }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setMic("This browser has no microphone. You can still type.");
+  baseText = input.value;
+  finalText = "";
+  interimText = "";
+  recordChunks = [];
+  keepListening = true;
+  listening = true;
+  showRecording();
+  const Ctor = speechCtor();
+  let speechStarted = false;
+  if (Ctor) {
+    speechStarted = startRecognition(Ctor);
+  }
+  let audioStarted = false;
+  try {
+    audioStarted = await startRecorder();
+  } catch (error) {
+    audioStarted = false;
+  }
+  if (!listening) {
     return;
+  }
+  if (!speechStarted && !audioStarted) {
+    listening = false;
+    keepListening = false;
+    hideRecording();
+    setMic("Microphone blocked. In Windows, choose Allow when the browser asks. You can still type.");
+  }
+}
+
+function startRecognition(Ctor) {
+  try {
+    const rec = new Ctor();
+    rec.lang = "en-IN";
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
+    rec.onresult = (event) => {
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const piece = event.results[index][0] ? event.results[index][0].transcript : "";
+        if (event.results[index].isFinal) {
+          finalText += piece;
+        } else {
+          interim += piece;
+        }
+      }
+      interimText = interim;
+      showLive();
+    };
+    rec.onerror = (event) => {
+      if (event.error === "language-not-supported" && rec.lang !== "en-US") {
+        rec.lang = "en-US";
+        try {
+          rec.start();
+        } catch (error) {
+          keepListening = false;
+        }
+        return;
+      }
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        keepListening = false;
+      }
+    };
+    rec.onend = () => {
+      if (keepListening && recognition === rec) {
+        try {
+          rec.start();
+        } catch (error) {
+          keepListening = false;
+        }
+      }
+    };
+    rec.start();
+    recognition = rec;
+    return true;
+  } catch (error) {
+    recognition = null;
+    return false;
+  }
+}
+
+async function startRecorder() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return false;
   }
   try {
     recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (error) {
-    setMic("Microphone blocked. In Windows, choose Allow when the browser asks. You can still type.");
-    hideRecording();
-    return;
+    recordStream = null;
+    return false;
   }
-  recordChunks = [];
-  discardRecording = false;
-  recorder = new MediaRecorder(recordStream);
+  if (!listening) {
+    recordStream.getTracks().forEach((track) => track.stop());
+    recordStream = null;
+    return false;
+  }
+  const mime = window.MediaRecorder && MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+  recorder = mime ? new MediaRecorder(recordStream, { mimeType: mime }) : new MediaRecorder(recordStream);
   recorder.addEventListener("dataavailable", (item) => {
     if (item.data && item.data.size) {
       recordChunks.push(item.data);
     }
   });
-  recorder.addEventListener("stop", () => {
+  recorder.start();
+  return true;
+}
+
+function stopRecognition() {
+  keepListening = false;
+  const rec = recognition;
+  recognition = null;
+  if (!rec) {
+    return;
+  }
+  rec.onend = null;
+  try {
+    rec.stop();
+  } catch (error) {
+    return;
+  }
+}
+
+function stopRecorder() {
+  return new Promise((resolve) => {
     const chunks = recordChunks.slice();
-    const discard = discardRecording;
-    cleanupRecording();
-    if (discard) {
+    const mime = recorder && recorder.mimeType ? recorder.mimeType : "audio/webm";
+    const finish = () => {
+      if (recordStream) {
+        recordStream.getTracks().forEach((track) => track.stop());
+        recordStream = null;
+      }
+      recorder = null;
+      recordChunks = [];
+      resolve(chunks.length ? new Blob(chunks, { type: mime }) : null);
+    };
+    if (recorder && recorder.state !== "inactive") {
+      recorder.addEventListener("stop", finish, { once: true });
+      try {
+        recorder.stop();
+        return;
+      } catch (error) {
+        finish();
+        return;
+      }
+    }
+    finish();
+  });
+}
+
+async function finishListening(mode) {
+  if (!listening || finishing) {
+    hideRecording();
+    return;
+  }
+  finishing = true;
+  listening = false;
+  const base = baseText;
+  const spoken = (finalText + interimText).trim();
+  hideRecording();
+  try {
+    const blob = await stopRecorder();
+    stopRecognition();
+    if (mode === "cancel") {
+      input.value = base;
       setMic("Recording cancelled. You can still type.");
       return;
     }
-    uploadRecording(chunks);
-  });
-  recorder.start();
-  showRecording();
-});
-
-recordingStop.addEventListener("click", () => {
-  discardRecording = false;
-  finishRecording();
-});
-
-recordingCancel.addEventListener("click", () => {
-  discardRecording = true;
-  finishRecording();
-});
+    let text = spoken;
+    if (!text && blob) {
+      setMic("Turning speech into text…");
+      text = await uploadRecording([blob]);
+    }
+    if (!text || !String(text).trim()) {
+      input.value = base;
+      setMic("Machaa could not hear any words. You can still type.");
+      return;
+    }
+    input.value = joinSpeech(base, text);
+    input.focus();
+    if (mode === "send") {
+      setMic("Sending.");
+      form.requestSubmit();
+      return;
+    }
+    setMic("Ready to send. Edit the words if you want.");
+  } catch (error) {
+    input.value = base;
+    hideRecording();
+    setMic(error && error.message ? error.message : "Machaa could not turn that speech into text. You can still type.");
+  } finally {
+    hideRecording();
+    finishing = false;
+    listening = false;
+  }
+}
 
 function showRecording() {
   recordSeconds = 0;
@@ -165,45 +364,42 @@ function hideRecording() {
   recordingTimer.textContent = "00:00";
 }
 
-function cleanupRecording() {
-  recorder = null;
-  if (recordStream) {
-    recordStream.getTracks().forEach((track) => track.stop());
-    recordStream = null;
-  }
-  hideRecording();
-  if (!muted() && micStatus.textContent === "Recording") {
-    setMic("Microphone off");
-  }
-}
-
-function finishRecording() {
-  if (recorder && recorder.state !== "inactive") {
-    recorder.stop();
-    return;
-  }
-  cleanupRecording();
-}
-
 async function uploadRecording(chunks) {
   if (!chunks.length) {
-    setMic("That recording was empty. You can still type.");
-    return;
+    const message = "That recording was empty. You can still type.";
+    setMic(message);
+    throw new Error(message);
   }
-  const blob = new Blob(chunks);
+  const blob = chunks.length === 1 && chunks[0] instanceof Blob ? chunks[0] : new Blob(chunks);
+  let response;
   try {
-    const response = await fetch("/api/voice/transcribe", { method: "POST", body: blob });
-    const body = await response.json();
-    if (!response.ok) {
-      setMic(body.detail || "Voice typing is unavailable. You can still type.");
-      return;
-    }
-    input.value = body.text || "";
-    input.focus();
-    setMic(input.value.trim() ? "Ready to send. Edit the words if you want." : "That recording was empty. You can still type.");
+    response = await fetch("/api/voice/transcribe", { method: "POST", body: blob });
   } catch (error) {
-    setMic("Voice typing is unavailable. You can still type.");
+    const message = "Machaa could not turn that speech into text. You can still type.";
+    setMic(message);
+    throw new Error(message);
   }
+  let body = {};
+  try {
+    body = await response.json();
+  } catch (error) {
+    body = {};
+  }
+  if (!response.ok) {
+    const message = body.detail || "Machaa could not turn that speech into text. You can still type.";
+    setMic(message);
+    throw new Error(message);
+  }
+  const text = (body.text || "").trim();
+  input.value = text;
+  input.focus();
+  if (!text) {
+    const message = "Machaa could not hear any words. You can still type.";
+    setMic(message);
+    throw new Error(message);
+  }
+  setMic("Ready to send. Edit the words if you want.");
+  return text;
 }
 
 desktopSwitch.addEventListener("change", async () => {
@@ -295,8 +491,22 @@ async function wakeLoop() {
   }
 }
 
+if (startCompanion) {
+  startCompanion.addEventListener("click", async () => {
+    const response = await fetch("/api/companion/start", { method: "POST" });
+    const body = await response.json();
+    const detail = body.detail || "Machaa cannot start the Companion from inside Docker.";
+    runtimeStatus.textContent = detail;
+    setMic(detail);
+  });
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (listening) {
+    await finishListening("send");
+    return;
+  }
   const instruction = input.value.trim();
   if (!instruction) {
     return;

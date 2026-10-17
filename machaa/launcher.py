@@ -162,6 +162,12 @@ def start(root: Path | None = None) -> int:
     print(companion.message)
     if companion.spawn:
         _spawn_companion(folder)
+        if not wait_for_companion():
+            print(
+                "The Windows Companion did not answer. "
+                "Leave the Machaa Companion window open and double-click START-MACHAA.bat again."
+            )
+            return 1
     try:
         note = _maybe_migrate(folder)
     except Exception:
@@ -204,13 +210,42 @@ def _launch_docker() -> None:
         return
 
 
+def wait_for_companion(port: int = 8788, attempts: int = 30, pause=None, opener=None) -> bool:
+    """True when the companion health page answers on this computer."""
+
+    import time
+    import urllib.request
+
+    def default_pause() -> None:
+        time.sleep(0.2)
+
+    sleep = pause or default_pause
+    open_url = opener or urllib.request.urlopen
+    for _ in range(max(1, attempts)):
+        try:
+            with open_url(f"http://127.0.0.1:{port}/health", timeout=1) as response:
+                if getattr(response, "status", 200) == 200:
+                    return True
+        except Exception:
+            pass
+        sleep()
+    return False
+
+
 def _spawn_companion(root: Path) -> None:
     env = _compose_env(root)
     documents = Path.home() / "Documents" / "Machaa"
     documents.mkdir(parents=True, exist_ok=True)
     env["MACHAA_DOCUMENTS_DIR"] = str(documents)
     env["MACHAA_COMPANION_PORT"] = "8788"
-    proc = subprocess.Popen([sys.executable, "-m", "machaa.companion"], cwd=root, env=env)
+    env["MACHAA_COMPANION_DOCKER"] = "1"
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if sys.platform == "win32" else 0
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "machaa.companion"],
+        cwd=root,
+        env=env,
+        creationflags=flags,
+    )
     (root / "data" / "companion.pid").write_text(str(proc.pid), encoding="utf-8")
 
 
