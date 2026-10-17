@@ -8,6 +8,15 @@ function showPageError(message) {
   banner.textContent = text;
 }
 
+function clearPageError() {
+  const banner = document.querySelector("[data-testid='page-error']");
+  if (!banner) {
+    return;
+  }
+  banner.hidden = true;
+  banner.textContent = "";
+}
+
 window.addEventListener("error", (event) => {
   showPageError(event && event.message ? event.message : "This page hit an error.");
 });
@@ -82,9 +91,16 @@ let recognition = null;
 let listening = false;
 let finishing = false;
 let keepListening = false;
-let speechSawResult = false;
 let speechWait = 0;
+let restartTimer = 0;
 let recorderReady = Promise.resolve(false);
+let recognitionEnded = Promise.resolve();
+let markRecognitionEnded = () => {};
+let endFallback = 0;
+let pendingListen = false;
+let opening = false;
+let diagnosticBase = "";
+const attemptLines = [];
 let baseText = "";
 let finalText = "";
 let interimText = "";
@@ -142,6 +158,13 @@ try {
   }
 
   listen(talk, "click", () => {
+    if (listening) {
+      return;
+    }
+    if (finishing || opening) {
+      pendingListen = true;
+      return;
+    }
     startListening();
   });
 
@@ -188,46 +211,106 @@ function clearSpeechWait() {
   speechWait = 0;
 }
 
-function speechGaveUp(reason) {
-  if (speechSawResult) {
+function clearRestart() {
+  window.clearTimeout(restartTimer);
+  restartTimer = 0;
+}
+
+function alreadyStarted(error) {
+  const name = error && error.name ? error.name : "";
+  const message = error && error.message ? String(error.message) : "";
+  return name === "InvalidStateError" || /already started/i.test(message);
+}
+
+function logAttempt(line) {
+  attemptLines.push(line);
+  if (attemptLines.length > 12) {
+    attemptLines.shift();
+  }
+  renderDiagnostic();
+}
+
+function renderDiagnostic() {
+  const diagnostic = document.querySelector("[data-testid='mic-diagnostic']");
+  if (!diagnostic) {
     return;
   }
-  clearSpeechWait();
-  keepListening = false;
-  const rec = recognition;
-  recognition = null;
-  if (rec) {
-    rec.onresult = null;
-    rec.onerror = null;
-    rec.onend = null;
-    try {
-      if (rec.abort) {
-        rec.abort();
-      } else {
-        rec.stop();
-      }
-    } catch (error) {
-      /* The engine had already stopped. */
-    }
+  const parts = [];
+  if (diagnosticBase) {
+    parts.push(diagnosticBase);
   }
-  if (listening) {
-    setMic(reason);
+  if (attemptLines.length) {
+    parts.push(attemptLines.join(" "));
   }
+  if (!parts.length) {
+    return;
+  }
+  diagnostic.hidden = false;
+  diagnostic.textContent = parts.join(" ");
 }
 
 function armSpeechWatch() {
   clearSpeechWait();
   speechWait = window.setTimeout(() => {
-    if (!speechSawResult && listening) {
-      speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
+    if (!finalText.trim() && listening && !finishing) {
+      setMic("The browser speech engine returned no words. Stop will turn the recording into text.");
     }
   }, 3000);
 }
 
+function settleRecognition() {
+  window.clearTimeout(endFallback);
+  endFallback = 0;
+  markRecognitionEnded();
+}
+
+function releaseRecognition() {
+  clearRestart();
+  keepListening = false;
+  const rec = recognition;
+  recognition = null;
+  window.clearTimeout(endFallback);
+  if (!rec) {
+    settleRecognition();
+    return recognitionEnded;
+  }
+  rec.onresult = null;
+  rec.onerror = null;
+  rec.onend = () => {
+    settleRecognition();
+  };
+  try {
+    if (rec.abort) {
+      rec.abort();
+    } else {
+      rec.stop();
+    }
+  } catch (error) {
+    settleRecognition();
+  }
+  endFallback = window.setTimeout(settleRecognition, 400);
+  return recognitionEnded;
+}
+
 async function startListening() {
-  if (listening || finishing) {
+  if (listening || finishing || opening) {
     return;
   }
+  opening = true;
+  try {
+    await openListening();
+  } catch (error) {
+    showPageError(error && error.message ? error.message : "The microphone could not start.");
+  } finally {
+    opening = false;
+    if (pendingListen && !listening && !finishing) {
+      pendingListen = false;
+      startListening();
+    }
+  }
+}
+
+async function openListening() {
   if (!window.isSecureContext) {
     setMic("Open http://127.0.0.1:8787 so the microphone can work. You can still type.");
     return;
@@ -236,19 +319,23 @@ async function startListening() {
     setMic("Muted");
     return;
   }
+  await releaseRecognition();
+  if (listening || finishing) {
+    return;
+  }
   baseText = input.value;
   finalText = "";
   interimText = "";
   recordChunks = [];
-  speechSawResult = false;
   clearSpeechWait();
+  clearRestart();
   keepListening = true;
   listening = true;
   showRecording();
   const Ctor = speechCtor();
   let speechStarted = false;
   if (Ctor) {
-    speechStarted = startRecognition(Ctor);
+    speechStarted = await startRecognition(Ctor);
   }
   let audioStarted = false;
   recorderReady = startRecorder().catch(() => false);
@@ -257,7 +344,7 @@ async function startListening() {
   } catch (error) {
     audioStarted = false;
   }
-  if (!listening) {
+  if (!listening || finishing) {
     return;
   }
   if (audioStarted) {
@@ -267,78 +354,153 @@ async function startListening() {
     listening = false;
     keepListening = false;
     hideRecording();
-    setMic("Microphone blocked. In Windows, choose Allow when the browser asks. You can still type.");
+    const message = "Microphone blocked. In Windows, choose Allow when the browser asks. You can still type.";
+    setMic(message);
+    showPageError(message);
+    logAttempt("Attempt failed: microphone blocked.");
   }
 }
 
-function startRecognition(Ctor) {
+function safeStart(rec) {
   try {
-    const rec = new Ctor();
-    rec.lang = "en-IN";
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.maxAlternatives = 1;
-    rec.onresult = (event) => {
-      try {
-        speechSawResult = true;
-        clearSpeechWait();
-        let interim = "";
-        const results = event && event.results ? event.results : [];
-        const from = event && event.resultIndex ? event.resultIndex : 0;
-        for (let index = from; index < results.length; index += 1) {
-          const piece = results[index][0] ? results[index][0].transcript : "";
-          if (results[index].isFinal) {
-            finalText += piece;
-          } else {
-            interim += piece;
-          }
-        }
-        interimText = interim;
-        showLive();
-      } catch (error) {
-        showPageError(error && error.message ? error.message : "Speech could not be shown.");
-      }
-    };
-    rec.onerror = (event) => {
-      try {
-        const code = event && event.error ? event.error : "";
-        if (code === "language-not-supported" && rec.lang !== "en-US") {
-          rec.lang = "en-US";
-          try {
-            rec.start();
-          } catch (error) {
-            speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
-          }
-          return;
-        }
-        if (
-          code === "network" ||
-          code === "not-allowed" ||
-          code === "service-not-allowed" ||
-          code === "audio-capture"
-        ) {
-          speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
-        }
-      } catch (error) {
-        speechGaveUp("The browser speech engine returned no words. Stop will turn the recording into text.");
-      }
-    };
-    rec.onend = () => {
-      if (keepListening && recognition === rec) {
-        try {
-          rec.start();
-        } catch (error) {
-          keepListening = false;
-        }
-      }
-    };
     rec.start();
-    recognition = rec;
     return true;
   } catch (error) {
-    recognition = null;
+    if (alreadyStarted(error)) {
+      return "running";
+    }
     return false;
   }
+}
+
+function restartRecognition(rec) {
+  clearRestart();
+  restartTimer = window.setTimeout(() => {
+    if (!keepListening || !listening || recognition !== rec || rec._fatal) {
+      return;
+    }
+    const started = safeStart(rec);
+    if (started === true) {
+      logAttempt("Speech engine restarted.");
+      return;
+    }
+    restartTimer = window.setTimeout(() => {
+      if (!keepListening || !listening || recognition !== rec || rec._fatal) {
+        return;
+      }
+      const again = safeStart(rec);
+      if (again === true) {
+        logAttempt("Speech engine restarted.");
+        return;
+      }
+      if (again === "running") {
+        return;
+      }
+      rec._fatal = true;
+      logAttempt("Speech engine could not restart.");
+      settleRecognition();
+    }, 200);
+  }, 150);
+}
+
+async function startRecognition(Ctor) {
+  await recognitionEnded;
+  const rec = new Ctor();
+  let resolveEnd = () => {};
+  recognitionEnded = new Promise((resolve) => {
+    resolveEnd = resolve;
+  });
+  let settled = false;
+  markRecognitionEnded = () => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    resolveEnd();
+  };
+  rec.lang = "en-IN";
+  rec.interimResults = true;
+  rec.continuous = true;
+  rec.maxAlternatives = 1;
+  rec._fatal = false;
+  rec.onresult = (event) => {
+    if (recognition !== rec) {
+      return;
+    }
+    try {
+      let interim = "";
+      const results = event && event.results ? event.results : [];
+      const from = event && typeof event.resultIndex === "number" ? event.resultIndex : 0;
+      for (let index = from; index < results.length; index += 1) {
+        const piece = results[index][0] ? results[index][0].transcript : "";
+        if (results[index].isFinal) {
+          finalText += piece;
+          interim = "";
+        } else {
+          interim += piece;
+        }
+      }
+      interimText = interim;
+      if (finalText.trim()) {
+        clearSpeechWait();
+      }
+      showLive();
+    } catch (error) {
+      showPageError(error && error.message ? error.message : "Speech could not be shown.");
+    }
+  };
+  rec.onerror = (event) => {
+    if (recognition !== rec) {
+      return;
+    }
+    const code = event && event.error ? event.error : "";
+    if (code === "language-not-supported" && rec.lang !== "en-US") {
+      rec.lang = "en-US";
+      logAttempt("Speech engine switched to US English.");
+      return;
+    }
+    if (code === "no-speech" || code === "aborted") {
+      return;
+    }
+    if (code === "network" || code === "not-allowed" || code === "service-not-allowed" || code === "audio-capture") {
+      rec._fatal = true;
+      logAttempt("Speech engine error: " + code + ".");
+      setMic("The browser speech engine returned no words. Stop will turn the recording into text.");
+      rec.onresult = null;
+      try {
+        rec.abort();
+      } catch (error) {
+        settleRecognition();
+      }
+    }
+  };
+  rec.onend = () => {
+    if (keepListening && listening && recognition === rec && !rec._fatal) {
+      restartRecognition(rec);
+      return;
+    }
+    rec.onresult = null;
+    rec.onerror = null;
+    settleRecognition();
+  };
+  recognition = rec;
+  const started = safeStart(rec);
+  if (started === true || started === "running") {
+    return true;
+  }
+  await new Promise((resolve) => window.setTimeout(resolve, 200));
+  if (recognition !== rec) {
+    return false;
+  }
+  const retried = safeStart(rec);
+  if (retried === true || retried === "running") {
+    return true;
+  }
+  recognition = null;
+  rec._fatal = true;
+  settleRecognition();
+  logAttempt("Speech engine could not start.");
+  return false;
 }
 
 async function startRecorder() {
@@ -374,21 +536,6 @@ async function startRecorder() {
   return true;
 }
 
-function stopRecognition() {
-  keepListening = false;
-  const rec = recognition;
-  recognition = null;
-  if (!rec) {
-    return;
-  }
-  rec.onend = null;
-  try {
-    rec.stop();
-  } catch (error) {
-    return;
-  }
-}
-
 function stopRecorder() {
   return new Promise((resolve) => {
     const mime = recorder && recorder.mimeType ? recorder.mimeType : "audio/webm";
@@ -418,38 +565,57 @@ function stopRecorder() {
 
 async function finishListening(mode) {
   clearSpeechWait();
+  clearRestart();
   hideRecording();
   if (!listening || finishing) {
     return;
   }
   finishing = true;
-  try {
-    await recorderReady;
-  } catch (error) {
-    /* The microphone was not ready. Stop still ends the timer. */
-  }
-  listening = false;
+  keepListening = false;
   const base = baseText;
-  const spoken = (finalText + interimText).trim();
-  hideRecording();
   try {
+    try {
+      await recorderReady;
+    } catch (error) {
+      /* The microphone was not ready. Stop still ends the timer. */
+    }
     const blob = await stopRecorder();
-    stopRecognition();
+    const finalSpoken = finalText.trim();
+    await releaseRecognition();
+    listening = false;
     if (mode === "cancel") {
       input.value = base;
+      finalText = "";
+      interimText = "";
       setMic("Recording cancelled. You can still type.");
+      logAttempt("Attempt cancelled.");
       return;
     }
-    let text = spoken;
-    if (!text && blob) {
-      setMic("Turning speech into text…");
+    let text = finalSpoken;
+    if (!text) {
+      setMic("Transcribing…");
+      if (!blob) {
+        const message = "Machaa could not turn that speech into text. You can still type.";
+        input.value = joinSpeech(base, interimText);
+        setMic(message);
+        showPageError(message);
+        logAttempt("Attempt failed: no recording.");
+        return;
+      }
       text = await uploadRecording([blob]);
+      logAttempt("Attempt: Gemini, " + text + ".");
+    } else {
+      logAttempt("Attempt: speech engine, " + text + ".");
     }
     if (!text || !String(text).trim()) {
+      const message = "Machaa could not hear any words. You can still type.";
       input.value = base;
-      setMic("Machaa could not hear any words. You can still type.");
+      setMic(message);
+      showPageError(message);
+      logAttempt("Attempt failed: no words.");
       return;
     }
+    clearPageError();
     input.value = joinSpeech(base, text);
     input.focus();
     if (mode === "send") {
@@ -459,13 +625,22 @@ async function finishListening(mode) {
     }
     setMic("Ready to send. Edit the words if you want.");
   } catch (error) {
+    const message = error && error.message ? error.message : "Machaa could not turn that speech into text. You can still type.";
     input.value = base;
     hideRecording();
-    setMic(error && error.message ? error.message : "Machaa could not turn that speech into text. You can still type.");
+    setMic(message);
+    showPageError(message);
+    logAttempt("Attempt failed: " + message);
   } finally {
     hideRecording();
     finishing = false;
     listening = false;
+    finalText = "";
+    interimText = "";
+    if (pendingListen) {
+      pendingListen = false;
+      startListening();
+    }
   }
 }
 
@@ -1158,7 +1333,6 @@ async function loadSetup() {
 }
 
 async function testMicrophone() {
-  const diagnostic = document.querySelector("[data-testid='mic-diagnostic']");
   const lines = [];
   const label = document.querySelector("[data-testid='build-label']");
   if (label && label.textContent) {
@@ -1218,10 +1392,8 @@ async function testMicrophone() {
       }
     }
   }
-  if (diagnostic) {
-    diagnostic.hidden = false;
-    diagnostic.textContent = lines.join(" ");
-  }
+  diagnosticBase = lines.join(" ");
+  renderDiagnostic();
   setMic(lines[lines.length - 1]);
 }
 

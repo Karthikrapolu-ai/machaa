@@ -161,7 +161,7 @@ def _exercise(errors: list[str]) -> None:
         assert page.get_by_test_id("desktop-control").is_checked()
         page.get_by_test_id("test-microphone").click()
         diagnostic = page.get_by_test_id("mic-diagnostic")
-        diagnostic.wait_for()
+        diagnostic.get_by_text("Mic level:").wait_for()
         text = diagnostic.inner_text()
         assert "Speech engine:" in text
         assert "Mic level:" in text
@@ -169,6 +169,177 @@ def _exercise(errors: list[str]) -> None:
         assert page.get_by_test_id("page-error").is_hidden()
         _shot(page, "day6-mic-test.png", full_page=True)
         browser.close()
+
+
+def test_five_recording_cycles_all_produce_text(monkeypatch, tmp_path: Path):
+    replies = iter(["gamma three", "buy an image using my credit card"])
+
+    def transcribe(data, **_kwargs):
+        assert data
+        return next(replies)
+
+    monkeypatch.setattr("machaa.api.routes.transcribe_audio", transcribe)
+    port = 8796
+    settings = Settings(
+        host="127.0.0.1",
+        port=port,
+        data_dir=tmp_path,
+        browser_profile_dir=tmp_path / "browser-profile",
+        artifacts_dir=tmp_path / "artifacts",
+        database_path=tmp_path / "machaa.sqlite3",
+        max_steps=4,
+        task_timeout_seconds=20,
+        navigation_timeout_ms=20000,
+        headless=True,
+        chromium_no_sandbox=True,
+    )
+    settings.ensure_dirs()
+    app = create_app(settings, ExplodingBrowser)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    for _ in range(50):
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=0.2)
+            break
+        except Exception:
+            time.sleep(0.1)
+    else:
+        raise AssertionError("dashboard did not start")
+
+    errors: list[str] = []
+    init = """
+      (() => {
+        let busy = false;
+        class FakeSpeech {
+          start() {
+            if (busy || window.__inEnd) {
+              const error = new Error("recognition has already started");
+              error.name = "InvalidStateError";
+              throw error;
+            }
+            busy = true;
+            this._closed = false;
+            window.__speech = this;
+            window.__starts = (window.__starts || 0) + 1;
+            const mode = window.__speechMode || "";
+            if (mode === "end-early" && !this._endedEarly) {
+              this._endedEarly = true;
+              window.setTimeout(() => this._shutdown(), 30);
+            }
+            if (mode === "network") {
+              window.setTimeout(() => {
+                if (this.onerror) this.onerror({ error: "network" });
+                this._shutdown();
+              }, 20);
+            }
+          }
+          stop() { this._shutdown(); }
+          abort() { this._shutdown(); }
+          _shutdown() {
+            if (this._closed) return;
+            this._closed = true;
+            busy = false;
+            window.__inEnd = true;
+            try {
+              if (this.onend) this.onend();
+            } finally {
+              window.__inEnd = false;
+            }
+          }
+        }
+        const define = (name) => {
+          try { delete window[name]; } catch (error) {}
+          Object.defineProperty(window, name, { configurable: true, writable: true, value: FakeSpeech });
+        };
+        define("SpeechRecognition");
+        define("webkitSpeechRecognition");
+      })();
+    """
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--use-fake-ui-for-media-stream",
+                    "--use-fake-device-for-media-stream",
+                ],
+            )
+            page = browser.new_page(viewport={"width": 1100, "height": 800})
+            page.add_init_script(init)
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.on(
+                "console",
+                lambda message: errors.append(message.text) if message.type == "error" else None,
+            )
+            page.goto(f"http://127.0.0.1:{port}/", wait_until="networkidle")
+
+            def say(text: str) -> None:
+                page.wait_for_function("() => window.__speech")
+                page.evaluate(
+                    """(spoken) => {
+                      const result = [{ transcript: spoken }];
+                      result.isFinal = true;
+                      window.__speech.onresult({ resultIndex: 0, results: [result] });
+                    }""",
+                    text,
+                )
+
+            def begin(mode: str = "") -> None:
+                page.evaluate(
+                    """(next) => { window.__speech = null; window.__speechMode = next; }""",
+                    mode,
+                )
+                page.get_by_test_id("talk").click()
+                page.get_by_test_id("recording").wait_for()
+
+            begin("")
+            say("alpha one")
+            page.get_by_test_id("recording-stop").click()
+            page.wait_for_function(
+                "() => document.querySelector('[data-testid=instruction]').value === 'alpha one'"
+            )
+
+            begin("")
+            say("buy an image using my credit card")
+            page.get_by_test_id("recording-send").click()
+            page.locator("[data-testid='task-status'][data-status='blocked']").wait_for(timeout=10000)
+
+            begin("network")
+            page.wait_for_timeout(500)
+            page.get_by_test_id("recording-stop").click()
+            page.wait_for_function(
+                "() => document.querySelector('[data-testid=instruction]').value === 'gamma three'"
+            )
+
+            begin("")
+            page.wait_for_timeout(500)
+            page.get_by_test_id("recording-send").click()
+            page.locator("[data-testid='task-status'][data-status='blocked']").nth(1).wait_for(timeout=10000)
+
+            page.evaluate("() => { window.__starts = 0; }")
+            begin("end-early")
+            page.wait_for_function("() => window.__starts >= 2")
+            say("epsilon five")
+            page.get_by_test_id("recording-stop").click()
+            page.wait_for_function(
+                """() => {
+                  const log = document.querySelector('[data-testid=mic-diagnostic]').textContent || '';
+                  const value = document.querySelector('[data-testid=instruction]').value;
+                  return log.includes('speech engine, epsilon five') && value === 'epsilon five';
+                }"""
+            )
+
+            log = page.get_by_test_id("mic-diagnostic").text_content() or ""
+            assert "speech engine, alpha one" in log
+            assert "Gemini, gamma three" in log
+            assert "speech engine, epsilon five" in log
+            assert "Speech engine restarted." in log
+            assert page.get_by_test_id("recording").is_hidden()
+            browser.close()
+    finally:
+        server.should_exit = True
+    assert errors == [], errors
 
 
 def _shot(page, name: str, full_page: bool = False) -> None:

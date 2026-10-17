@@ -33,6 +33,10 @@ def test_speech_uses_the_browser_and_send_submits():
     assert "3000" in script
     assert "network" in script
     assert "not-allowed" in script
+    assert "continuous" in script
+    assert "Transcribing" in script
+    assert "InvalidStateError" in script
+    assert "already started" in script
     assert "Speech engine:" in script
     assert "Mic level:" in script
     assert 'data-testid="build-label"' in page
